@@ -11,6 +11,7 @@
   "author": "𝕽𝖊𝖌𝖆𝖘_𝖐𝖎𝖓𝖌 𝖉𝖙𝖍 & 𝑨ꝛ፝֟「𝐄𝐍𝐙𝐎」",
   "license": "ISC",
   "dependencies": {
+    "@upstash/redis": "^1.38.0",
     "axios": "^1.16.0",
     "baileys": "^7.0.0-rc10",
     "better-sqlite3": "^12.9.0",

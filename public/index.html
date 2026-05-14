@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZΞRO_BΛILΞY_4 4 4</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Syne:wght@400;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+:root {
+  --bg: #050505;
+  --surface: rgba(13,13,13,0.85);
+  --border: #1a1a1a;
+  --accent: #e8ff00;
+  --accent2: #ff2d2d;
+  --text: #f0f0f0;
+  --muted: #888;
+  --green: #25d366;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  overflow-x: hidden;
+  cursor: none;
+}
+
+.cursor { width: 10px; height: 10px; background: var(--accent); border-radius: 50%; position: fixed; pointer-events: none; z-index: 9999; mix-blend-mode: difference; }
+.cursor-ring { width: 36px; height: 36px; border: 1px solid var(--accent); border-radius: 50%; position: fixed; pointer-events: none; z-index: 9998; transition: all 0.15s ease; mix-blend-mode: difference; }
+@media (pointer: coarse) { .cursor, .cursor-ring { display: none !important; } body { cursor: auto !important; } }
+
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; backdrop-filter: blur(10px); border-bottom: 1px solid transparent; transition: border-color 0.3s, background 0.3s; }
+nav.scrolled { border-color: var(--border); background: rgba(5,5,5,0.9); }
+.nav-logo { font-family: 'Bebas Neue', sans-serif; font-size: 22px; letter-spacing: 3px; color: var(--accent); }
+.burger { width: 32px; height: 20px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; z-index: 200; }
+.burger span { display: block; height: 1.5px; background: var(--text); transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1); transform-origin: center; }
+.burger.open span:nth-child(1) { transform: translateY(9px) rotate(45deg); }
+.burger.open span:nth-child(2) { opacity: 0; transform: scaleX(0); }
+.burger.open span:nth-child(3) { transform: translateY(-9px) rotate(-45deg); }
+
+.menu-overlay { position: fixed; inset: 0; background: rgba(5,5,5,0.98); z-index: 150; display: flex; align-items: center; justify-content: center; clip-path: circle(0% at calc(100% - 56px) 30px); transition: clip-path 0.7s cubic-bezier(0.76, 0, 0.24, 1); }
+.menu-overlay.open { clip-path: circle(150% at calc(100% - 56px) 30px); }
+.menu-links { display: flex; flex-direction: column; gap: 20px; text-align: center; }
+.menu-links a { font-family: 'Bebas Neue', sans-serif; font-size: clamp(36px, 7vw, 72px); letter-spacing: 4px; color: var(--muted); text-decoration: none; transition: color 0.2s, transform 0.2s; }
+.menu-links a:hover { color: var(--accent); transform: translateX(8px); }
+.menu-footer { position: absolute; bottom: 40px; font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 2px; }
+
+/* SECTIONS — fond cyberpunk sur toutes */
+section { padding: 120px 40px; position: relative; background-size: cover; background-position: center; background-attachment: fixed; }
+.section-label { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 4px; color: var(--accent); text-transform: uppercase; margin-bottom: 16px; text-shadow: 0 0 10px rgba(232,255,0,0.3); }
+.section-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(48px, 8vw, 90px); letter-spacing: 2px; line-height: 0.95; margin-bottom: 60px; }
+.divider { width: 100%; height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); }
+.reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.7s ease, transform 0.7s ease; }
+.reveal.visible { opacity: 1; transform: translateY(0); }
+
+/* HERO */
+#home {
+  min-height: 100vh; display: flex; flex-direction: column; justify-content: center; overflow: hidden;
+  background-image: linear-gradient(rgba(5,5,5,0.65), rgba(5,5,5,0.92)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/hero-bg-cyberpunk-a9jorydQbT5EkLL4oji4g7.webp');
+}
+.hero-bg-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-family: 'Bebas Neue', sans-serif; font-size: clamp(100px, 25vw, 280px); color: transparent; -webkit-text-stroke: 1px rgba(232,255,0,0.05); white-space: nowrap; pointer-events: none; user-select: none; animation: drift 20s ease-in-out infinite; }
+@keyframes drift { 0%,100% { transform: translate(-50%,-50%) skewX(0deg); } 50% { transform: translate(-50%,-52%) skewX(-1deg); } }
+.hero-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(64px, 12vw, 140px); line-height: 0.9; letter-spacing: 2px; opacity: 0; animation: fadeUp 0.8s 0.3s forwards; }
+.hero-title .accent { color: var(--accent); }
+.hero-title .dim { color: var(--muted); }
+.hero-sub { margin-top: 32px; font-size: 16px; color: var(--text); max-width: 480px; line-height: 1.7; opacity: 0; animation: fadeUp 0.8s 0.5s forwards; }
+.hero-cta { margin-top: 48px; display: flex; gap: 16px; flex-wrap: wrap; opacity: 0; animation: fadeUp 0.8s 0.7s forwards; }
+.hero-scroll { position: absolute; bottom: 40px; right: 40px; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--muted); writing-mode: vertical-rl; display: flex; align-items: center; gap: 12px; }
+.hero-scroll::after { content: ''; width: 1px; height: 60px; background: var(--muted); animation: scrollLine 2s ease-in-out infinite; }
+@keyframes scrollLine { 0%,100% { transform: scaleY(1); opacity: 1; } 50% { transform: scaleY(0.3); opacity: 0.3; } }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+
+.btn-primary { background: var(--accent); color: #000; padding: 14px 32px; font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; border: none; cursor: pointer; transition: all 0.2s; display: inline-block; }
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 20px rgba(232,255,0,0.4); }
+/* FIX btn-secondary : plus de couleur bleue de lien */
+.btn-secondary { background: transparent; color: var(--text); padding: 14px 32px; font-family: 'Space Mono', monospace; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; text-decoration: none; border: 1px solid var(--border); cursor: pointer; display: inline-block; transition: border-color 0.2s, color 0.2s; }
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+/* CONNEXION */
+#connect {
+  min-height: 100vh; display: flex; align-items: center;
+  background-image: linear-gradient(rgba(5,5,5,0.82), rgba(5,5,5,0.95)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/connection-section-bg-a27qJ4dKWZcXazjW3ASfoN.webp');
+}
+.connect-wrapper { max-width: 1100px; margin: 0 auto; width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+@media (max-width: 768px) { .connect-wrapper { grid-template-columns: 1fr; } }
+.connect-desc { font-size: 14px; color: var(--text); line-height: 1.8; margin-bottom: 40px; }
+.steps { display: flex; flex-direction: column; gap: 20px; }
+.step { display: flex; align-items: flex-start; gap: 16px; padding: 20px; border: 1px solid var(--border); background: var(--surface); backdrop-filter: blur(5px); transition: border-color 0.2s; }
+.step:hover { border-color: var(--accent); }
+.step-num { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: var(--accent); line-height: 1; min-width: 40px; }
+.step-text { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.step-text strong { color: var(--text); display: block; }
+.connect-form-box { background: var(--surface); border: 1px solid var(--border); padding: 48px; backdrop-filter: blur(10px); box-shadow: 0 0 30px rgba(0,0,0,0.5); }
+.connect-form-box h3 { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; margin-bottom: 32px; }
+.form-step { display: none; }
+.form-step.active { display: block; }
+.input-group { margin-bottom: 24px; }
+.input-group label { display: block; font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; }
+.input-group input { width: 100%; padding: 14px 16px; background: rgba(0,0,0,0.5); border: 1px solid var(--border); color: var(--text); font-family: 'Space Mono', monospace; font-size: 14px; outline: none; transition: border-color 0.2s; }
+.input-group input:focus { border-color: var(--accent); box-shadow: inset 0 0 10px rgba(232,255,0,0.1); }
+.input-group input::placeholder { color: var(--muted); }
+.btn-connect { width: 100%; padding: 16px; background: var(--accent); color: #000; font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; border: none; cursor: pointer; transition: all 0.2s; }
+.btn-connect:hover:not(:disabled) { box-shadow: 0 0 20px rgba(232,255,0,0.3); transform: translateY(-1px); }
+.btn-connect:disabled { opacity: 0.5; cursor: not-allowed; }
+.code-display { display: flex; gap: 8px; justify-content: center; margin: 32px 0; flex-wrap: wrap; }
+.code-char { width: 52px; height: 64px; background: rgba(0,0,0,0.5); border: 1px solid var(--accent); display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: var(--accent); box-shadow: inset 0 0 10px rgba(232,255,0,0.1); animation: popIn 0.3s ease forwards; opacity: 0; }
+@keyframes popIn { from { opacity: 0; transform: scale(0.8) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+.code-instructions { text-align: center; font-size: 13px; color: var(--muted); line-height: 1.7; padding: 20px; border: 1px solid var(--border); margin-bottom: 24px; }
+.code-instructions strong { color: var(--text); }
+.status-indicator { display: flex; align-items: center; gap: 10px; font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 2px; color: var(--muted); margin-bottom: 24px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.status-dot.connecting { background: #ff9900; animation: blink 1s infinite; }
+.status-dot.connected { background: var(--green); }
+.status-dot.error { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.error-text { color: var(--accent2) !important; text-shadow: 0 0 5px rgba(255,45,45,0.4); }
+.success-box { text-align: center; padding: 40px 20px; }
+.success-icon { width: 80px; height: 80px; border-radius: 50%; background: rgba(37,211,102,0.1); border: 1px solid var(--green); display: flex; align-items: center; justify-content: center; font-size: 32px; margin: 0 auto 24px; }
+.success-title { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; margin-bottom: 12px; }
+.success-desc { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.success-num { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--accent); margin: 16px 0; }
+
+/* HALL OF FAME */
+#halloffame {
+  background-image: linear-gradient(rgba(5,5,5,0.88), rgba(5,5,5,0.88)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/hero-bg-cyberpunk-a9jorydQbT5EkLL4oji4g7.webp');
+}
+.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--border); }
+.feature-card { background: rgba(5,5,5,0.9); padding: 36px 28px; transition: background 0.2s; position: relative; overflow: hidden; }
+.feature-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.3s; }
+.feature-card:hover::before { transform: scaleX(1); }
+.feature-card:hover { background: rgba(10,10,10,0.95); }
+.feature-num { font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--border); line-height: 1; margin-bottom: 16px; transition: color 0.2s; }
+.feature-card:hover .feature-num { color: var(--accent); }
+.feature-title { font-weight: 800; font-size: 17px; margin-bottom: 10px; }
+.feature-desc { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+/* BOT PRINCIPAL */
+#bot-section {
+  background-image: linear-gradient(rgba(5,5,5,0.75), rgba(5,5,5,0.9)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/connection-section-bg-a27qJ4dKWZcXazjW3ASfoN.webp');
+}
+.bot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+@media (max-width: 768px) { .bot-grid { grid-template-columns: 1fr; } }
+.bot-card { background: var(--surface); border: 1px solid var(--border); padding: 48px; backdrop-filter: blur(5px); }
+.dev-badge { display: inline-flex; align-items: center; gap: 8px; background: rgba(255,45,45,0.1); border: 1px solid var(--accent2); color: var(--accent2); font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 2px; padding: 6px 14px; margin-bottom: 24px; }
+.dev-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent2); animation: blink 1s infinite; }
+.bot-name { font-family: 'Bebas Neue', sans-serif; font-size: 52px; letter-spacing: 3px; line-height: 1; margin-bottom: 16px; }
+.bot-desc { font-size: 14px; color: var(--muted); line-height: 1.8; margin-bottom: 32px; }
+.stats-row { display: flex; gap: 32px; flex-wrap: wrap; }
+.stat-item { text-align: center; }
+.stat-num { font-family: 'Bebas Neue', sans-serif; font-size: 42px; color: var(--accent); line-height: 1; }
+.stat-label { font-family: 'Space Mono', monospace; font-size: 9px; letter-spacing: 2px; color: var(--muted); margin-top: 4px; }
+.bot-visual { position: relative; height: 400px; display: flex; align-items: center; justify-content: center; }
+.bot-ring { width: 300px; height: 300px; border-radius: 50%; border: 1px solid var(--border); position: absolute; animation: spin 20s linear infinite; }
+.bot-ring:nth-child(2) { width: 220px; height: 220px; border-color: rgba(232,255,0,0.2); animation-direction: reverse; animation-duration: 12s; }
+.bot-ring::before { content: ''; position: absolute; top: -3px; left: 50%; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.bot-center { width: 120px; height: 120px; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-family: 'Bebas Neue', sans-serif; font-size: 14px; letter-spacing: 2px; color: var(--accent); z-index: 1; text-align: center; padding: 16px; }
+
+/* ABOUT */
+#about {
+  background-image: linear-gradient(rgba(5,5,5,0.82), rgba(5,5,5,0.92)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/hero-bg-cyberpunk-a9jorydQbT5EkLL4oji4g7.webp');
+}
+.team-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-top: 60px; }
+.team-card { border: 1px solid var(--border); padding: 40px; position: relative; transition: border-color 0.3s; background: var(--surface); backdrop-filter: blur(5px); }
+.team-card:hover { border-color: var(--accent); }
+.team-role { font-family: 'Space Mono', monospace; font-size: 10px; letter-spacing: 3px; color: var(--accent); margin-bottom: 12px; }
+.team-name { font-size: 22px; font-weight: 800; margin-bottom: 16px; line-height: 1.3; }
+.team-desc { font-size: 13px; color: var(--muted); line-height: 1.7; }
+.team-num { position: absolute; top: 24px; right: 24px; font-family: 'Bebas Neue', sans-serif; font-size: 60px; color: var(--border); line-height: 1; }
+
+/* CONTACT */
+#contact {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 80px;
+  background-image: linear-gradient(rgba(5,5,5,0.85), rgba(5,5,5,0.95)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/connection-section-bg-a27qJ4dKWZcXazjW3ASfoN.webp');
+}
+@media (max-width: 768px) { #contact { grid-template-columns: 1fr; } }
+.contact-info h3 { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; margin-bottom: 24px; }
+.contact-item { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.contact-item:last-child { border-bottom: none; }
+.contact-icon { width: 36px; height: 36px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+.contact-text { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.contact-text strong { color: var(--text); font-size: 14px; display: block; margin-bottom: 4px; }
+.privacy-box { background: var(--surface); border: 1px solid var(--border); padding: 40px; backdrop-filter: blur(5px); }
+.privacy-box h3 { font-family: 'Bebas Neue', sans-serif; font-size: 36px; letter-spacing: 2px; margin-bottom: 24px; }
+.privacy-item { margin-bottom: 16px; padding-left: 16px; border-left: 2px solid var(--accent); font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+/* CANAL */
+#canal {
+  text-align: center;
+  background-image: linear-gradient(rgba(5,5,5,0.78), rgba(5,5,5,0.93)), url('https://d2xsxph8kpxj0f.cloudfront.net/310519663090350877/EwuJ9pxKR8RA4RuhHGrJcE/hero-bg-cyberpunk-a9jorydQbT5EkLL4oji4g7.webp');
+}
+.canal-title { font-family: 'Bebas Neue', sans-serif; font-size: clamp(52px, 10vw, 110px); letter-spacing: 4px; line-height: 0.9; margin-bottom: 32px; }
+.canal-title span { color: var(--accent); }
+.canal-desc { font-size: 15px; color: var(--muted); max-width: 500px; margin: 0 auto 48px; line-height: 1.7; }
+.canal-btn { display: inline-flex; align-items: center; gap: 12px; background: var(--green); color: #000; padding: 18px 40px; font-family: 'Space Mono', monospace; font-size: 13px; letter-spacing: 2px; text-decoration: none; font-weight: 700; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; border: none; }
+.canal-btn:hover:not(.locked) { transform: translateY(-3px); box-shadow: 0 12px 40px rgba(37,211,102,0.3); }
+.canal-btn.locked { background: var(--border); color: var(--muted); cursor: not-allowed; pointer-events: none; }
+.unlock-msg { font-family: 'Space Mono', monospace; font-size: 11px; letter-spacing: 1px; color: var(--accent2); margin-top: 16px; transition: color 0.3s; }
+
+footer { padding: 40px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; background: var(--bg); }
+.footer-logo { font-family: 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 3px; color: var(--accent); }
+.footer-text { font-family: 'Space Mono', monospace; font-size: 10px; color: var(--muted); letter-spacing: 2px; }
+
+@media (prefers-reduced-motion: reduce) { *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
+@media (max-width: 768px) { nav { padding: 20px 24px; } section { padding: 80px 24px; background-attachment: scroll; } footer { padding: 32px 24px; flex-direction: column; text-align: center; } }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+<div class="cursor-ring" id="cursorRing"></div>
+
+<nav id="navbar">
+  <div class="nav-logo">ZΞRO</div>
+  <div class="burger" id="burger"><span></span><span></span><span></span></div>
+</nav>
+
+<div class="menu-overlay" id="menuOverlay">
+  <nav class="menu-links">
+    <a href="#home" onclick="closeMenu()">Accueil</a>
+    <a href="#connect" onclick="closeMenu()">Connexion</a>
+    <a href="#halloffame" onclick="closeMenu()">Hall of Fame</a>
+    <a href="#bot-section" onclick="closeMenu()">Bot Principal</a>
+    <a href="#about" onclick="closeMenu()">A Propos</a>
+    <a href="#contact" onclick="closeMenu()">Contact</a>
+    <a href="#canal" onclick="closeMenu()">Communaute</a>
+  </nav>
+  <div class="menu-footer">ZΞRO_BΛILΞY_4 4 4 — 2025</div>
+</div>
+
+<!-- HERO : nom supprime -->
+<section id="home">
+  <div class="hero-bg-text">ZΞRO</div>
+  <h1 class="hero-title">ZΞRO<br><span class="accent">BΛILΞY</span><br><span class="dim">4 4 4</span></h1>
+  <p class="hero-sub">Le bot WhatsApp qui sait que tu peux pas t'en passer. 116+ commandes. Une personnalite. Construit par les meilleurs.</p>
+  <div class="hero-cta">
+    <a href="#connect" class="btn-primary">Connecter mon bot</a>
+    <a href="#halloffame" class="btn-secondary">Voir les features</a>
+  </div>
+  <div class="hero-scroll">SCROLL</div>
+</section>
+
+<div class="divider"></div>
+
+<section id="connect">
+  <div class="connect-wrapper">
+    <div class="connect-info reveal">
+      <div class="section-label">// Connexion</div>
+      <h2 class="section-title">Active<br>ton bot</h2>
+      <p class="connect-desc">Connecte ZΞRO_BΛILΞY_4 4 4 a ton numero WhatsApp. Le serveur gere la session en toute securite.</p>
+      <div class="steps">
+        <div class="step"><div class="step-num">01</div><div class="step-text"><strong>Entre ton numero</strong>Format international sans le +</div></div>
+        <div class="step"><div class="step-num">02</div><div class="step-text"><strong>Recois le code</strong>Un code a 8 caracteres apparaitra ici</div></div>
+        <div class="step"><div class="step-num">03</div><div class="step-text"><strong>Associe l'appareil</strong>WhatsApp > Appareils connectes > Entre le code</div></div>
+      </div>
+    </div>
+    <div class="connect-form-box reveal">
+      <h3>Connexion<br>rapide</h3>
+      <div class="form-step active" id="step1">
+        <div class="status-indicator"><div class="status-dot" id="statusDot"></div><span id="statusText">En attente</span></div>
+        <div class="input-group">
+          <label>Ton numero WhatsApp</label>
+          <input type="tel" id="phoneInput" placeholder="50988442536" maxlength="15" autocomplete="off">
+        </div>
+        <button class="btn-connect" id="connectBtn" onclick="startConnection()">Generer le code</button>
+      </div>
+      <div class="form-step" id="step2">
+        <div class="status-indicator"><div class="status-dot connecting" id="statusDot2"></div><span id="statusText2">En attente du code...</span></div>
+        <div class="code-display" id="codeDisplay"></div>
+        <button onclick="copyCode()" style="background:transparent;color:var(--accent);border:1px solid var(--accent);font-family:'Space Mono',monospace;font-size:11px;letter-spacing:2px;padding:8px 20px;cursor:pointer;width:100%;margin-bottom:16px;">
+          COPIER LE CODE
+        </button>
+        <div class="code-instructions">Ouvre WhatsApp > <strong>Appareils connectes</strong> > Entre ce code</div>
+        <button class="btn-connect" style="background:transparent;color:var(--muted);border:1px solid var(--border);" onclick="resetConnection()">Recommencer</button>
+      </div>
+      <div class="form-step" id="step3">
+        <div class="success-box">
+          <div class="success-icon">OK</div>
+          <div class="success-title">Bot Connecte !</div>
+          <div class="success-num" id="connectedNum"></div>
+          <p class="success-desc">ZΞRO_BΛILΞY_4 4 4 est actif. Envoie <strong style="color:var(--accent)">.menu</strong> pour commencer.</p>
+          <button class="btn-connect" style="margin-top:24px;" onclick="resetConnection()">Connecter un autre numero</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="halloffame">
+  <div class="reveal">
+    <div class="section-label">// Hall of Fame</div>
+    <h2 class="section-title">Ce que<br>tu obtiens</h2>
+  </div>
+  <div class="features-grid reveal">
+    <div class="feature-card"><div class="feature-num">01</div><div class="feature-title">116+ Commandes</div><div class="feature-desc">General, groupe, medias, IA, games, outils et owner. Tout est la. Organise. Fonctionnel.</div></div>
+    <div class="feature-card"><div class="feature-num">02</div><div class="feature-title">Personnalite ZΞRO</div><div class="feature-desc">Froid. Arrogant. Il t'obeit mais il sait que t'as besoin de lui. Chaque reponse a du caractere.</div></div>
+    <div class="feature-card"><div class="feature-num">03</div><div class="feature-title">IA Mistral</div><div class="feature-desc">Recherche musicale intelligente, conversations avec contexte, quiz genere par IA.</div></div>
+    <div class="feature-card"><div class="feature-num">04</div><div class="feature-title">Anti View-Once</div><div class="feature-desc">Les messages qui disparaissent ? Plus vraiment. Le bot les intercepte et les renvoie.</div></div>
+    <div class="feature-card"><div class="feature-num">05</div><div class="feature-title">Musique Rapide</div><div class="feature-desc">yt-dlp + aria2c + 16 connexions paralleles. MP3 en moins de 10 secondes.</div></div>
+    <div class="feature-card"><div class="feature-num">06</div><div class="feature-title">Menu Interactif</div><div class="feature-desc">5 categories. Reply avec un chiffre pour acceder au sous-menu. Simple et propre.</div></div>
+    <div class="feature-card"><div class="feature-num">07</div><div class="feature-title">Systeme XP</div><div class="feature-desc">Chaque commande rapporte des points. Classement en temps reel. Qui est le plus actif ?</div></div>
+    <div class="feature-card"><div class="feature-num">08</div><div class="feature-title">Quiz IA Avance</div><div class="feature-desc">10 themes. 3 niveaux de difficulte. 10 a 20 questions. Score en direct. Powered by Mistral.</div></div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="bot-section">
+  <div class="bot-grid">
+    <div class="reveal">
+      <div class="section-label">// Bot Principal</div>
+      <div class="bot-card">
+        <div class="dev-badge">EN DEVELOPPEMENT</div>
+        <div class="bot-name">ZΞRO_BΛILΞY<br>4 4 4</div>
+        <p class="bot-desc">Le bot principal est en cours de finalisation. Chaque feature est testee, affinees, et validee avant le deploiement public. La qualite avant la vitesse.</p>
+        <div class="stats-row">
+          <div class="stat-item"><div class="stat-num">116+</div><div class="stat-label">Commandes</div></div>
+          <div class="stat-item"><div class="stat-num">7</div><div class="stat-label">Categories</div></div>
+          <div class="stat-item"><div class="stat-num">0</div><div class="stat-label">Compromis</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="bot-visual reveal">
+      <div class="bot-ring"></div>
+      <div class="bot-ring"></div>
+      <div class="bot-center">ZΞRO<br>BOT</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="about">
+  <div class="reveal">
+    <div class="section-label">// A Propos</div>
+    <h2 class="section-title">Les<br>createurs</h2>
+  </div>
+  <div class="team-grid">
+    <div class="team-card reveal">
+      <div class="team-num">01</div>
+      <div class="team-role">Owner — Dev Principal</div>
+      <div class="team-name">Regas_king dth</div>
+      <p class="team-desc">Architecte du projet. Developpeur backend, strategie technique et vision globale du bot. Passionne de dev et de hacking ethique.</p>
+    </div>
+    <div class="team-card reveal">
+      <div class="team-num">02</div>
+      <div class="team-role">Co-Owner — Dev & Securite</div>
+      <div class="team-name">ENZO 4 4 4</div>
+      <p class="team-desc">Expert en cybersecurite et hacking ethique. Co-developpeur du projet et responsable de la securite et des tests.</p>
+    </div>
+  </div>
+  <div class="reveal" style="margin-top:60px;padding:40px;border:1px solid var(--border);max-width:700px;background:var(--surface);backdrop-filter:blur(5px);">
+    <div class="section-label" style="margin-bottom:16px;">// Notre mission</div>
+    <p style="font-size:15px;color:var(--muted);line-height:1.8;">Former la prochaine generation de developpeurs et de hackers ethiques. Partager nos connaissances, construire des outils utiles, et prouver qu'on peut venir de n'importe ou et construire quelque chose d'exceptionnel.</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="contact">
+  <div class="contact-info reveal">
+    <div class="section-label">// Contact</div>
+    <h3>Nous<br>contacter</h3>
+    <br>
+    <div class="contact-item">
+      <div class="contact-icon">WA</div>
+      <div class="contact-text"><strong>WhatsApp</strong>Rejoins notre groupe de discussion pour toute question sur le bot ou les formations</div>
+    </div>
+    <div class="contact-item">
+      <div class="contact-icon">CH</div>
+      <div class="contact-text"><strong>Chaine</strong>Suis notre chaine pour les updates et annonces</div>
+    </div>
+    <div class="contact-item">
+      <div class="contact-icon">FO</div>
+      <div class="contact-text"><strong>Formations</strong>Dev Web, Hacking Ethique, Cybersecurite — contenu regulier sur notre canal</div>
+    </div>
+  </div>
+  <div class="privacy-box reveal">
+    <div class="section-label">// Confidentialite</div>
+    <h3>Politique de<br>confidentialite</h3>
+    <br>
+    <div class="privacy-item">Le bot ne stocke aucune donnee personnelle de facon permanente. Les messages sont traites en temps reel.</div>
+    <div class="privacy-item">Les cles API sont stockees localement sur votre serveur. Nous n'avons aucun acces a vos configurations.</div>
+    <div class="privacy-item">Le systeme XP et les scores sont stockes en memoire et reinitialises au redemarrage.</div>
+    <div class="privacy-item">Aucune donnee n'est partagee avec des tiers. Le bot fonctionne via l'API WhatsApp Baileys.</div>
+    <div class="privacy-item">En utilisant ce bot, vous acceptez les conditions d'utilisation de WhatsApp.</div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section id="canal">
+  <div class="reveal">
+    <div class="section-label">// Communaute</div>
+    <h2 class="canal-title">Rejoins<br>la <span>team</span></h2>
+    <p class="canal-desc">Formations en dev et hacking ethique, updates du bot, tutoriels exclusifs. Tout se passe ici.</p>
+    <div style="display:flex;flex-direction:column;align-items:center;gap:16px;margin-top:32px;">
+      <a href="https://whatsapp.com/channel/0029Vb7XnIMElagkvLe8ga0b" class="canal-btn" target="_blank" onclick="unlockGroup()">1. Rejoindre la Chaine</a>
+      <a href="https://chat.whatsapp.com/G2BHsqe9X5uIrHEinzHP93?mode=gi_t" id="groupBtn" class="canal-btn locked" target="_blank">2. Rejoindre le Groupe</a>
+      <div id="unlockMsg" class="unlock-msg">X Clique sur la chaine pour debloquer le groupe</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">ZΞRO_BΛILΞY_4 4 4</div>
+  <div class="footer-text">Regas x ENZO — 2025</div>
+  <div class="footer-text">Dev & Hacking Ethique</div>
+</footer>
+
+<script>
+const socket = io()
+let currentSessionId = null
+
+const cursor = document.getElementById('cursor')
+const ring = document.getElementById('cursorRing')
+let mouseX = 0, mouseY = 0, ringX = 0, ringY = 0
+if (window.matchMedia("(pointer: fine)").matches) {
+  document.addEventListener('mousemove', e => {
+    mouseX = e.clientX; mouseY = e.clientY
+    cursor.style.left = mouseX - 5 + 'px'
+    cursor.style.top = mouseY - 5 + 'px'
+  })
+  function animateRing() {
+    ringX += (mouseX - ringX - 18) * 0.15
+    ringY += (mouseY - ringY - 18) * 0.15
+    ring.style.left = ringX + 'px'
+    ring.style.top = ringY + 'px'
+    requestAnimationFrame(animateRing)
+  }
+  animateRing()
+}
+
+const burger = document.getElementById('burger')
+const overlay = document.getElementById('menuOverlay')
+let menuOpen = false
+burger.addEventListener('click', () => {
+  menuOpen = !menuOpen
+  burger.classList.toggle('open')
+  overlay.classList.toggle('open')
+  document.body.style.overflow = menuOpen ? 'hidden' : ''
+})
+function closeMenu() {
+  menuOpen = false
+  burger.classList.remove('open')
+  overlay.classList.remove('open')
+  document.body.style.overflow = ''
+}
+
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 50)
+})
+
+const reveals = document.querySelectorAll('.reveal')
+const observer = new IntersectionObserver(entries => {
+  entries.forEach((entry, i) => {
+    if (entry.isIntersecting) setTimeout(() => entry.target.classList.add('visible'), i * 100)
+  })
+}, { threshold: 0.1 })
+reveals.forEach(el => observer.observe(el))
+
+function unlockGroup() {
+  const groupBtn = document.getElementById('groupBtn')
+  const msg = document.getElementById('unlockMsg')
+  groupBtn.classList.remove('locked')
+  msg.style.color = 'var(--green)'
+  msg.textContent = 'Groupe debloque — bienvenue dans la team'
+}
+
+async function startConnection() {
+  const phone = document.getElementById('phoneInput').value.replace(/\D/g, '')
+  if (!phone || phone.length < 8) return showError('Numero invalide')
+  const btn = document.getElementById('connectBtn')
+  btn.disabled = true
+  btn.textContent = 'Generation...'
+  setStatus1('connecting', 'Negociation avec le serveur...')
+  try {
+    const res = await fetch('/api/session/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    })
+    if (!res.ok) throw new Error('Erreur HTTP: ' + res.status)
+    const data = await res.json()
+    if (data.success && data.sessionId) {
+      currentSessionId = data.sessionId
+      socket.emit('join', currentSessionId)
+      showStep(2)
+      setStatus2('connecting', 'En attente du code...')
+    } else throw new Error(data.error || 'Refus du serveur')
+  } catch (err) { showError(err.message) }
+}
+
+socket.on('pairingCode', ({ code }) => {
+  displayCode(code.replace(/-/g, ''))
+  setStatus2('connecting', 'Entre le code sur WhatsApp...')
+})
+socket.on('connected', ({ number }) => {
+  showStep(3)
+  document.getElementById('connectedNum').textContent = number
+})
+socket.on('reconnecting', () => setStatus2('connecting', 'Reconnexion...'))
+socket.on('error', ({ message }) => setStatus2('error', message))
+
+function displayCode(code) {
+  const display = document.getElementById('codeDisplay')
+  display.innerHTML = ''
+  code.split('').forEach((char, i) => {
+    const div = document.createElement('div')
+    div.className = 'code-char'
+    div.textContent = char
+    div.style.animationDelay = i * 0.08 + 's'
+    display.appendChild(div)
+  })
+}
+function copyCode(event) {
+  const chars = document.querySelectorAll('.code-char')
+  const code = Array.from(chars).map(c => c.textContent).join('')
+  navigator.clipboard.writeText(code)
+    .then(() => {
+      const btn = event.target
+      btn.textContent = 'COPIE !'
+      setTimeout(() => btn.textContent = 'COPIER LE CODE', 2000)
+    })
+}
+function showStep(n) {
+  document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'))
+  document.getElementById('step' + n).classList.add('active')
+}
+function setStatus1(type, text) {
+  document.getElementById('statusDot').className = 'status-dot ' + type
+  const el = document.getElementById('statusText')
+  el.className = type === 'error' ? 'error-text' : ''
+  el.textContent = text
+}
+function setStatus2(type, text) {
+  document.getElementById('statusDot2').className = 'status-dot ' + type
+  document.getElementById('statusText2').textContent = text
+}
+function showError(msg) {
+  setStatus1('error', msg)
+  const btn = document.getElementById('connectBtn')
+  btn.disabled = false
+  btn.textContent = 'Reessayer'
+}
+function resetConnection() {
+  if (currentSessionId) fetch('/api/session/' + currentSessionId, { method: 'DELETE' }).catch(() => {})
+  currentSessionId = null
+  document.getElementById('phoneInput').value = ''
+  const btn = document.getElementById('connectBtn')
+  btn.disabled = false
+  btn.textContent = 'Generer le code'
+  setStatus1('', 'En attente')
+  showStep(1)
+}
+</script>
+</body>
+</html>

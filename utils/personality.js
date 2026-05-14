@@ -140,6 +140,9 @@ export const personality = {
       if (senderNum === dynamicNum) return true
     }
 
+    // Vérifier les LIDs fixes des owners
+    if (config.owners.some(o => o.lid && o.lid.split('@')[0].split(':')[0] === senderNum)) return true
+
     // Owners fixes
     return config.owners.some(o => 
       o.number.split('@')[0].split(':')[0] === senderNum

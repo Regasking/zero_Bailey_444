@@ -58,6 +58,23 @@ export async function handleMessage(sock, msg) {
 
     // Détection reply au menu
     const quotedId = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
+
+    // FIX SONG — Détection reply au menu .song
+    try {
+      const { songSessions } = await import('../commands/media/song.js')
+      if (quotedId && songSessions.has(msg.key.remoteJid)) {
+        const session = songSessions.get(msg.key.remoteJid)
+        if (quotedId === session.menuId) {
+          const songCmd = commands.get('song')
+          if (songCmd) {
+            const isOwner = personality.isOwner(msg.key.participant || msg.key.remoteJid)
+            await songCmd.execute(sock, msg, [body.trim()], { isOwner, senderJid: msg.key.participant || msg.key.remoteJid })
+            return
+          }
+        }
+      }
+    } catch {}
+
     const { menuMessages } = await import('../commands/general/menu.js')
 
     if (quotedId && menuMessages.has(msg.key.remoteJid)) {
