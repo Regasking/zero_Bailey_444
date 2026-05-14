@@ -1,3 +1,4 @@
+import { personality } from '../../utils/personality.js'
 import { config } from '../../config.js'
 import axios from 'axios'
 import fs from 'fs'
