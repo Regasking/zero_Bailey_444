@@ -14,7 +14,7 @@ import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import fs from 'fs'
 import { Redis } from '@upstash/redis'
-import { loadCommands } from './handlers/messageHandler.js'
+import { loadCommands, setStore } from './handlers/messageHandler.js'
 import { handleEvents } from './handlers/eventHandler.js'
 import { config } from './config.js'
 
@@ -35,7 +35,6 @@ const redis = new Redis({
 
 // ═══════════ PERSISTANCE SESSION ═══════════
 
-// Sauvegarde les creds d'une session dans Redis
 async function saveSession(sessionId, sessionPath, phone) {
   try {
     if (!fs.existsSync(sessionPath)) return
@@ -45,7 +44,6 @@ async function saveSession(sessionId, sessionPath, phone) {
       const filePath = path.join(sessionPath, file)
       creds[file] = fs.readFileSync(filePath, 'utf8')
     }
-    // FIX : sauvegarder le phone avec les creds
     creds['__phone__'] = phone
     await redis.set(`session:${sessionId}`, JSON.stringify(creds))
     console.log(`[Redis] Session ${sessionId} sauvegardée`)
@@ -54,7 +52,6 @@ async function saveSession(sessionId, sessionPath, phone) {
   }
 }
 
-// Charge les creds d'une session depuis Redis
 async function loadSession(sessionId, sessionPath) {
   try {
     const data = await redis.get(`session:${sessionId}`)
@@ -72,7 +69,6 @@ async function loadSession(sessionId, sessionPath) {
   }
 }
 
-// Supprime une session de Redis
 async function deleteSession(sessionId) {
   try {
     await redis.del(`session:${sessionId}`)
@@ -82,7 +78,6 @@ async function deleteSession(sessionId) {
   }
 }
 
-// Sessions actives en mémoire
 const sessions = new Map()
 
 // ═══════════ FONCTION CRÉATION SOCKET ═══════════
@@ -91,7 +86,6 @@ async function createSocket(sessionId, cleanPhone) {
   const sessionPath = `./sessions/${sessionId}`
   if (!fs.existsSync(sessionPath)) fs.mkdirSync(sessionPath, { recursive: true })
 
-  // Charge depuis Redis si dispo
   await loadSession(sessionId, sessionPath)
 
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath)
@@ -104,6 +98,10 @@ async function createSocket(sessionId, cleanPhone) {
     logger: pino({ level: 'silent' }),
     browser: Browsers.macOS('Chrome'),
     syncFullHistory: false,
+    getMessage: async (key) => {
+      const session = sessions.get(sessionId)
+      return session?.store?.get(key.id) || { conversation: '' }
+    }
   })
 
   const store = new Map()
@@ -133,17 +131,16 @@ async function createSocket(sessionId, cleanPhone) {
       const botNumber = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
       const connectedLid = sock.user?.lid?.split(':')[0] + '@lid'
 
-      // Stocker les identifiants dans la session — pas dans config global
-      // (config global écrase toutes les sessions en multi-session)
       if (sessions.has(sessionId)) {
         const session = sessions.get(sessionId)
         session.connected = true
         session.sock = sock
         session.dynamicOwner = botNumber
         session.connectedLid = connectedLid
+        session.store = store
+        setStore(store)
       }
 
-      // Mettre à jour config uniquement si une seule session active (compatibilité)
       if (sessions.size <= 1) {
         config.dynamicOwner = botNumber
         config.connectedLid = connectedLid
@@ -161,7 +158,6 @@ async function createSocket(sessionId, cleanPhone) {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       console.log(`❌ [${sessionId}] Déconnecté — code: ${code}`)
 
-      // Déjà connecté = on ignore les faux 515
       if (sessions.get(sessionId)?.connected) return
 
       if (code === DisconnectReason.loggedOut) {
@@ -184,7 +180,6 @@ async function createSocket(sessionId, cleanPhone) {
     }
   })
 
-  // Sauvegarde dans Redis à chaque update des creds
   sock.ev.on('creds.update', async () => {
     await saveCreds()
     await saveSession(sessionId, sessionPath, cleanPhone)
@@ -234,7 +229,6 @@ app.delete('/api/session/:sessionId', async (req, res) => {
 })
 
 // ═══════════ RESTAURATION AU DÉMARRAGE ═══════════
-// Recharge toutes les sessions actives depuis Redis au boot
 async function restoreSessions() {
   try {
     const keys = await redis.keys('session:*')
@@ -248,7 +242,8 @@ async function restoreSessions() {
       if (!phone) continue
       try {
         const sock = await createSocket(sessionId, phone)
-        sessions.set(sessionId, { sock, connected: false, phone, store: new Map() })
+        const store = new Map()
+        sessions.set(sessionId, { sock, connected: false, phone, store })
         console.log(`[Redis] Session ${sessionId} restaurée`)
       } catch (err) {
         console.error(`[Redis] Erreur restauration ${sessionId}:`, err.message)
@@ -279,5 +274,6 @@ app.get('/{*splat}', (req, res) => {
 const PORT = process.env.PORT || 3000
 httpServer.listen(PORT, async () => {
   console.log(`🌐 Serveur lancé sur http://localhost:${PORT}`)
+  await loadCommands()
   await restoreSessions()
 })

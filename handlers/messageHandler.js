@@ -203,15 +203,15 @@ export async function handleMessage(sock, msg) {
     } catch {}
 
     // Premier contact
-    try {
-      const seen = await redis.get(`seen:${senderJid}`)
-      if (!seen) {
-        await redis.set(`seen:${senderJid}`, '1', { ex: 60 * 60 * 24 * 365 })
-        await sock.sendMessage(senderJid, {
-          text: `╔══════════════════════╗\n  ⚡  B I E N V E N U E\n╚══════════════════════╝\n\nTu viens d'activer *${config.botName}*.\n\nJe suis opérationnel. Ne me fais pas perdre mon temps.\n\n▸ *${config.prefix}menu* — Voir mes commandes\n▸ *${config.prefix}alive* — Vérifier mon statut\n\n— *${config.botName}*\n_𝘊𝘰𝘯𝘴𝘵𝘳𝘶𝘪𝘵 𝘱𝘢𝘳 𝘭𝘦𝘴 𝘮𝘦𝘪𝘭𝘭𝘦𝘶𝘳𝘴._`
-        })
-      }
-    } catch {}
+try {
+  const seen = await redis.get(`seen:${senderJid}`)
+  if (!seen) {
+    await redis.set(`seen:${senderJid}`, '1', { ex: 60 * 60 * 24 * 365 })
+    await sock.sendMessage(senderJid, {   // ← sock direct, pas sockProxy
+      text: `╔══════════════════════╗\n  ⚡  B I E N V E N U E\n╚══════════════════════╝\n\nTu viens d'activer *${config.botName}*.\n\nJe suis opérationnel. Ne me fais pas perdre mon temps.\n\n▸ *${config.prefix}menu* — Voir mes commandes\n▸ *${config.prefix}alive* — Vérifier mon statut\n\n— *${config.botName}*\n_𝘊𝘰𝘯𝘴𝘵𝘳𝘶𝘪𝘵 𝘱𝘢𝘳 𝘭𝘦𝘴 𝘮𝘦𝘪𝘭𝘭𝘦𝘶𝘳𝘴._`
+    })
+  }
+} catch {}
 
     // Mode maintenance
     try {
