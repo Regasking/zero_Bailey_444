@@ -3,7 +3,7 @@ import { config } from '../../config.js'
 
 export default {
   name: 'sudo',
-  alias: ['admin'],
+  alias: ['owners', 'ownerlist'],
   desc: 'Gérer les admins bot',
   category: 'owner',
   ownerOnly: true,
@@ -12,15 +12,12 @@ export default {
     const jid = msg.key.remoteJid
     if (!isOwner) return
 
-    if (!args[0]) {
-      const ownerList = config.owners.map(o => `▸ ${o.name} (${o.role})`).join('\n')
-      return sock.sendMessage(jid, {
-        text: `👑 *Owners du bot*\n━━━━━━━━━━━━━━━━━━━━━\n${ownerList}\n━━━━━━━━━━━━━━━━━━━━━`
-      })
-    }
+    const ownerList = config.owners.map(o =>
+      `▸ *${o.name}*\n  Role : ${o.role}\n  Numéro : ${o.number.split('@')[0]}`
+    ).join('\n\n')
 
     await sock.sendMessage(jid, {
-      text: personality.format('owner_cmd')
+      text: `╔══════════════════════╗\n  👑  O W N E R S\n╚══════════════════════╝\n\n${ownerList}\n\n— *${config.botName}* | _Au sommet. Comme toujours._`
     })
   }
 }

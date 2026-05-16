@@ -82,19 +82,16 @@ export const personality = {
     'Profite. Tout le monde peut pas se vanter de m\'avoir.',
   ],
 
-  // Retourne une réponse aléatoire
   format(type) {
     const pool = this.responses[type]
     return pool[Math.floor(Math.random() * pool.length)]
   },
 
-  // Résultat avec intro froide
   withResult(result) {
     const intros = ['Voilà.\n\n', 'Tiens.\n\n', 'C\'est ce que tu voulais.\n\n']
     return intros[Math.floor(Math.random() * intros.length)] + result
   },
 
-  // Flex créateurs — 1 chance sur 4
   maybeFlexCreator() {
     if (Math.random() < 0.25) {
       const pool = this.creatorFlex
@@ -103,7 +100,6 @@ export const personality = {
     return ''
   },
 
-  // Réponse spéciale owner
   ownerGreeting(jid) {
     const owner = config.owners.find(o => o.number === jid)
     if (!owner) return this.format('greeting')
@@ -125,27 +121,66 @@ export const personality = {
     ][Math.floor(Math.random() * 3)]
   },
 
+  // ═══════════════════════════════════════════════════════════
+  // isOwner — vérification renforcée
+  // Règles de sécurité :
+  // 1. Le numéro doit être non vide et purement numérique (ou LID valide)
+  // 2. Comparaison stricte — pas de includes/startsWith
+  // 3. Le dynamicOwner (bot lui-même) est owner mais PAS les sudos non déclarés
+  // 4. Un JID vide ou malformé = refus systématique
+  // ═══════════════════════════════════════════════════════════
   isOwner(jid) {
-    const senderNum = jid.split('@')[0].split(':')[0]
+    if (!jid || typeof jid !== 'string') return false
 
-    // Vérifier contre le LID connecté
-    if (config.connectedLid) {
-      const lidNum = config.connectedLid.split('@')[0].split(':')[0]
-      if (senderNum === lidNum) return true
+    // Extraire le numéro brut (sans @s.whatsapp.net, sans :device)
+    const senderNum = jid.split('@')[0].split(':')[0].trim()
+
+    // Refuser les JIDs vides ou non numériques (sauf LID qui peut avoir des chiffres longs)
+    if (!senderNum || !/^\d+$/.test(senderNum)) return false
+
+    // ── 1. Owners fixes déclarés dans config (source de vérité principale) ──
+    for (const owner of config.owners) {
+      const ownerNum = owner.number?.split('@')[0]?.split(':')[0]?.trim()
+      if (ownerNum && ownerNum === senderNum) return true
+
+      // LID fixe déclaré
+      if (owner.lid) {
+        const lidNum = owner.lid.split('@')[0].split(':')[0].trim()
+        if (lidNum && lidNum === senderNum) return true
+      }
     }
 
-    // Vérifier contre le numéro dynamique
+    // ── 2. Numéro dynamique du bot connecté (bot = owner de lui-même) ──
     if (config.dynamicOwner) {
-      const dynamicNum = config.dynamicOwner.split('@')[0].split(':')[0]
-      if (senderNum === dynamicNum) return true
+      const dynamicNum = config.dynamicOwner.split('@')[0].split(':')[0].trim()
+      if (dynamicNum && dynamicNum === senderNum) return true
     }
 
-    // Vérifier les LIDs fixes des owners
-    if (config.owners.some(o => o.lid && o.lid.split('@')[0].split(':')[0] === senderNum)) return true
+    // ── 3. LID connecté dynamiquement ──────────────────────────────────
+    if (config.connectedLid) {
+      const lidNum = config.connectedLid.split('@')[0].split(':')[0].trim()
+      // Vérification supplémentaire : le LID connecté doit correspondre
+      // à un owner déclaré pour éviter qu'un LID inconnu devienne owner
+      const lidBelongsToOwner = config.owners.some(o => {
+        const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
+        return ownerNum && config.dynamicOwner?.startsWith(ownerNum)
+      })
+      if (lidBelongsToOwner && lidNum && lidNum === senderNum) return true
+    }
 
-    // Owners fixes
-    return config.owners.some(o => 
-      o.number.split('@')[0].split(':')[0] === senderNum
-    )
+    return false
+  },
+
+  // Version stricte pour commandes ultra-sensibles (eval, restart, etc.)
+  isHardOwner(jid) {
+    if (!jid || typeof jid !== 'string') return false
+    const senderNum = jid.split('@')[0].split(':')[0].trim()
+    if (!senderNum || !/^\d+$/.test(senderNum)) return false
+
+    // Uniquement les owners fixes — pas de dynamicOwner, pas de LID connecté
+    return config.owners.some(o => {
+      const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
+      return ownerNum && ownerNum === senderNum
+    })
   }
 }

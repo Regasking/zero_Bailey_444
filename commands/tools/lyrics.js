@@ -12,7 +12,7 @@ export default {
 
     if (!args.length) {
       return sock.sendMessage(jid, {
-        text: personality.format('error_usage') + '\n\nUtilisation : .lyrics <chanson>'
+        text: personality.format('error_usage') + '\n\nUtilisation : .lyrics <chanson>\nEx: .lyrics Bohemian Rhapsody Queen'
       })
     }
 
@@ -21,7 +21,6 @@ export default {
     try {
       await sock.sendMessage(jid, { text: '🔍 Recherche des paroles...' })
 
-      // Utilise Mistral pour obtenir les paroles directement
       const res = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -33,14 +32,20 @@ export default {
           max_tokens: 1500,
           messages: [{
             role: 'user',
-            content: `Donne-moi les paroles complètes de la chanson "${query}". 
-Réponds avec ce format exact :
+            content: `Tu es un assistant qui donne les paroles de chansons.
+
+Règles STRICTES :
+- Si tu connais avec CERTITUDE les paroles officielles de "${query}", donne-les avec ce format :
 TITRE: [titre officiel]
 ARTISTE: [nom artiste]
+CONNU: OUI
 PAROLES:
 [paroles ici]
 
-Si tu ne connais pas cette chanson, réponds uniquement: INTROUVABLE`
+- Si tu n'es PAS CERTAIN ou si tu ne connais pas cette chanson, réponds UNIQUEMENT :
+CONNU: NON
+
+Ne jamais inventer ou approximer des paroles.`
           }]
         })
       })
@@ -48,29 +53,34 @@ Si tu ne connais pas cette chanson, réponds uniquement: INTROUVABLE`
       const data = await res.json()
       const content = data.choices[0].message.content.trim()
 
-      if (content === 'INTROUVABLE' || content.includes('INTROUVABLE')) {
+      // Vérifie si Mistral connaît la chanson
+      if (content.includes('CONNU: NON') || !content.includes('CONNU: OUI')) {
         return sock.sendMessage(jid, {
-          text: '❌ Paroles introuvables. Essaie avec le nom de l\'artiste ou en anglais.'
+          text: `❌ Paroles introuvables pour *"${query}"*.\n\nEssaie avec le titre exact + l'artiste.\nEx: \`.lyrics Shape of You Ed Sheeran\``
         })
       }
 
-      // Parser la réponse
       const titreMatch = content.match(/TITRE:\s*(.+)/i)
       const artisteMatch = content.match(/ARTISTE:\s*(.+)/i)
       const parolesMatch = content.match(/PAROLES:\s*([\s\S]+)/i)
 
       const titre = titreMatch ? titreMatch[1].trim() : query
       const artiste = artisteMatch ? artisteMatch[1].trim() : 'Inconnu'
-      const paroles = parolesMatch ? parolesMatch[1].trim() : content
+      const paroles = parolesMatch ? parolesMatch[1].replace('CONNU: OUI', '').trim() : ''
 
-      // WhatsApp limite à ~65000 chars, on tronque si besoin
+      if (!paroles) {
+        return sock.sendMessage(jid, {
+          text: `❌ Impossible d'extraire les paroles. Essaie avec un titre plus précis.`
+        })
+      }
+
       const maxLen = 3000
       const parolesFinales = paroles.length > maxLen
-        ? paroles.slice(0, maxLen) + '\n\n[... suite trop longue]'
+        ? paroles.slice(0, maxLen) + '\n\n_[... paroles tronquées]_'
         : paroles
 
       await sock.sendMessage(jid, {
-        text: `🎵 *${titre}*\n👤 *${artiste}*\n━━━━━━━━━━━━━━━━━━\n\n${parolesFinales}\n\n━━━━━━━━━━━━━━━━━━\n${personality.format('success')}${personality.maybeFlexCreator()}`
+        text: `╔══════════════════════╗\n  🎵  P A R O L E S\n╚══════════════════════╝\n\n🎵 *${titre}*\n👤 *${artiste}*\n\n${parolesFinales}\n\n— *${config.botName}* | ${personality.format('success')}`
       })
 
     } catch (err) {

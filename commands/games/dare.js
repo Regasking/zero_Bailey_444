@@ -1,23 +1,29 @@
+import { config } from '../../config.js'
+
 const actions = [
-  'Envoie un message vocal en chantant.',
-  'Change ton nom WhatsApp pendant 1 heure.',
-  'Envoie ton dernier screenshot.',
-  'Fais 20 pompes et envoie une vidéo.',
+  'Envoie un message vocal en chantant. Maintenant.',
+  'Change ton nom WhatsApp pendant 1 heure. Et assume.',
+  'Envoie ton dernier screenshot. Celui que t\'aurais pas voulu montrer.',
+  'Fais 20 pompes et envoie une vidéo. Ou avoue que tu peux pas.',
   'Envoie un message à quelqu\'un que t\'as pas contacté depuis 1 mois.',
-  'Imite quelqu\'un dans le groupe en vocal.',
-  'Envoie ta photo de profil actuelle.',
-  'Écris un poème sur quelqu\'un dans le groupe.',
+  'Imite quelqu\'un dans le groupe en vocal. Sans te défiler.',
+  'Envoie ta vraie photo de profil. Pas celle du personnage anime.',
+  'Écris un poème sur quelqu\'un dans le groupe. Un vrai.',
+  'Envoie le dernier mème que t\'as sauvegardé.',
+  'Appelle quelqu\'un du groupe maintenant. En direct.',
 ]
 
 const truths = [
-  'Qui est ton crush dans ce groupe ?',
-  'Quel est ton plus grand secret ?',
-  'Quelle est la chose la plus embarrassante que t\'as faite ?',
-  'Tu as déjà menti à un ami proche ?',
-  'Quelle est ta pire habitude ?',
-  'Qui dans le groupe tu bloquerais en premier ?',
-  'Quel est ton vrai avis sur le groupe ?',
-  'Tu as déjà trahi quelqu\'un ? Comment ?',
+  'Qui est ton crush dans ce groupe ? Et sois honnête.',
+  'Quel est ton plus grand secret que personne ici ne sait ?',
+  'Quelle est la chose la plus embarrassante que t\'as faite récemment ?',
+  'Tu as déjà menti à ton meilleur ami ? Sur quoi ?',
+  'Quelle est ta pire habitude que tu caches ?',
+  'Qui dans ce groupe tu supportes le moins ? Dis un nom.',
+  'Quel est ton vrai avis sur ce groupe ? La vérité.',
+  'Tu as déjà trahi quelqu\'un de confiance ? Comment ?',
+  'Quelle chose tu regrettes le plus cette année ?',
+  'Quel est le message le plus gênant de ta galerie ?',
 ]
 
 export default {
@@ -33,19 +39,19 @@ export default {
     if (type === 'action' || type === 'dare') {
       const action = actions[Math.floor(Math.random() * actions.length)]
       return sock.sendMessage(jid, {
-        text: `🎯 *ACTION*\n━━━━━━━━━━━━━━━━━━━━━\n${action}\n━━━━━━━━━━━━━━━━━━━━━\n_Tu peux pas refuser._`
+        text: `╔══════════════════════╗\n  🎯  A C T I O N\n╚══════════════════════╝\n\n${action}\n\n_Tu peux pas refuser. C\'est les règles._\n\n— *${config.botName}*`
       })
     }
 
     if (type === 'verite' || type === 'truth') {
       const truth = truths[Math.floor(Math.random() * truths.length)]
       return sock.sendMessage(jid, {
-        text: `💭 *VÉRITÉ*\n━━━━━━━━━━━━━━━━━━━━━\n${truth}\n━━━━━━━━━━━━━━━━━━━━━\n_Réponds honnêtement._`
+        text: `╔══════════════════════╗\n  💭  V É R I T É\n╚══════════════════════╝\n\n${truth}\n\n_Réponds honnêtement. Je sais quand tu mens._\n\n— *${config.botName}*`
       })
     }
 
     await sock.sendMessage(jid, {
-      text: `🎮 *Action ou Vérité*\n\n▸ .dare action — Reçois une action\n▸ .dare verite — Reçois une vérité`
+      text: `╔══════════════════════╗\n  🎮  A C T I O N  /  V É R I T É\n╚══════════════════════╝\n\n▸ \`${config.prefix}dare action\` — Reçois une action\n▸ \`${config.prefix}dare verite\` — Reçois une vérité\n\n_Choisis. Si t\'oses._\n\n— *${config.botName}*`
     })
   }
 }

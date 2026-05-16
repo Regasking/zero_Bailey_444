@@ -1,7 +1,7 @@
 import { personality } from '../../utils/personality.js'
 import { config } from '../../config.js'
 
-export let botMode = 'public'
+export let botMode = config.settings.publicMode ? 'public' : 'private'
 
 export default {
   name: 'mode',
@@ -12,25 +12,24 @@ export default {
 
   async execute(sock, msg, args, { isOwner, senderJid }) {
     const jid = msg.key.remoteJid
-    
-    // Accessible par le owner du bot (celui qui a configuré le .env)
-    const senderNum = senderJid.split('@')[0]
-    const isConfigOwner = config.owners.some(o => o.number.split('@')[0] === senderNum)
 
-    if (!isConfigOwner) {
+    // messageHandler gère déjà ownerOnly — on fait confiance à isOwner
+    if (!isOwner) {
       return sock.sendMessage(jid, {
-        text: '❌ Commande réservée aux owners.'
+        text: 'Tu n\'as pas accès à cette commande.'
       }, { quoted: msg })
     }
 
     const mode = args[0]?.toLowerCase()
+
     if (!['public', 'private', 'group'].includes(mode)) {
       return sock.sendMessage(jid, {
-        text: `⚙️ *Mode actuel :* ${botMode}\n\nUtilisation : .mode public/private/group\n\n▸ *public* — Tout le monde\n▸ *private* — Owners seulement\n▸ *group* — Groupes seulement`
+        text: `⚙️ *Mode actuel :* ${botMode}\n\nUtilisation : ${config.prefix}mode public/private/group\n\n▸ *public* — Tout le monde\n▸ *private* — Owners seulement\n▸ *group* — Groupes seulement`
       }, { quoted: msg })
     }
 
     botMode = mode
+
     await sock.sendMessage(jid, {
       text: `✅ Mode changé en *${mode}*\n\n— ${personality.format('owner_cmd')}`
     }, { quoted: msg })

@@ -4,8 +4,8 @@ export let maintenanceMode = false
 
 export default {
   name: 'maintenance',
-  alias: ['mode'],
-  desc: 'Mode maintenance',
+  alias: ['maint'],
+  desc: 'Mode maintenance on/off',
   category: 'owner',
   ownerOnly: true,
 
@@ -16,7 +16,9 @@ export default {
     maintenanceMode = !maintenanceMode
 
     await sock.sendMessage(jid, {
-      text: `🔧 Mode maintenance *${maintenanceMode ? 'activé ✅' : 'désactivé ❌'}*\n\n— ${personality.format('owner_cmd')}`
+      text: `🔧 Mode maintenance *${maintenanceMode ? 'activé ✅' : 'désactivé ❌'}*\n\n${maintenanceMode
+        ? 'Le bot ignore toutes les commandes sauf les owners.'
+        : 'Le bot répond à tout le monde à nouveau.'}\n\n— ${personality.format('owner_cmd')}`
     })
   }
 }

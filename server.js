@@ -131,20 +131,30 @@ async function createSocket(sessionId, cleanPhone) {
 
     if (connection === 'open') {
       const botNumber = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
-      config.dynamicOwner = botNumber
-      config.connectedLid = sock.user?.lid?.split(':')[0] + '@lid'
-      console.log(`[LID] ${config.connectedLid}`)
+      const connectedLid = sock.user?.lid?.split(':')[0] + '@lid'
 
+      // Stocker les identifiants dans la session — pas dans config global
+      // (config global écrase toutes les sessions en multi-session)
       if (sessions.has(sessionId)) {
-        sessions.get(sessionId).connected = true
-        sessions.get(sessionId).sock = sock
+        const session = sessions.get(sessionId)
+        session.connected = true
+        session.sock = sock
+        session.dynamicOwner = botNumber
+        session.connectedLid = connectedLid
       }
+
+      // Mettre à jour config uniquement si une seule session active (compatibilité)
+      if (sessions.size <= 1) {
+        config.dynamicOwner = botNumber
+        config.connectedLid = connectedLid
+      }
+
+      console.log(`✅ [${sessionId}] Connecté: ${botNumber} | LID: ${connectedLid}`)
 
       io.to(sessionId).emit('connected', {
         number: botNumber,
         name: sock.user?.name
       })
-      console.log(`✅ [${sessionId}] Connecté: ${botNumber}`)
     }
 
     if (connection === 'close') {

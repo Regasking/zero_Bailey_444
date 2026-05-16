@@ -17,6 +17,7 @@ const subMenus = {
 ▸ ${config.prefix}botinfo — Infos du bot
 ▸ ${config.prefix}id — Ton ID WhatsApp
 ▸ ${config.prefix}time — Heure actuelle
+▸ ${config.prefix}settings — Préférences
 ▸ ${config.prefix}getbot — Obtenir ce bot`,
 
   '2': `👥 *GROUPE*
@@ -32,11 +33,12 @@ const subMenus = {
 ▸ ${config.prefix}poll — Créer un sondage
 ▸ ${config.prefix}groupinfo — Infos du groupe
 ▸ ${config.prefix}welcome — Bienvenue on/off
-▸ ${config.prefix}goodbye — Sortie on/off`,
+▸ ${config.prefix}goodbye — Sortie on/off\n▸ ${config.prefix}antigroup — Protections du groupe`,
 
   '3': `🎵 *MÉDIA & IA*
 ━━━━━━━━━━━━━━━━━━━━━
 ▸ ${config.prefix}song — Musique MP3
+▸ ${config.prefix}csong — Envoyer musique vers channel
 ▸ ${config.prefix}lyrics — Paroles d'une chanson
 ▸ ${config.prefix}ai — Parler à l'IA
 ▸ ${config.prefix}translate — Traduire un texte
@@ -62,7 +64,16 @@ const subMenus = {
 ▸ ${config.prefix}calc — Calculatrice
 ▸ ${config.prefix}qr — Générer QR Code
 ▸ ${config.prefix}getpp — Photo de profil
-▸ ${config.prefix}translate — Traduire`
+▸ ${config.prefix}translate — Traduire`,
+
+  '6': `👑 *OWNER*
+━━━━━━━━━━━━━━━━━━━━━
+▸ ${config.prefix}broadcast — Message général
+▸ ${config.prefix}eval — Exécuter du code
+▸ ${config.prefix}maintenance — Mode maintenance
+▸ ${config.prefix}mode — Mode public/privé
+▸ ${config.prefix}restart — Redémarrer le bot
+▸ ${config.prefix}sudo — Ajouter un sudo`
 }
 
 export const mainMenu = (date, heure, isOwner, prefix) => `⚡ 𝒁𝑬𝑹𝑶_𝑩𝑨𝑰𝑳𝑬𝒀_𝟒 𝟒 𝟒 ⚡
@@ -94,6 +105,17 @@ export default {
     const now = new Date()
     const heure = now.toLocaleTimeString('fr-FR')
     const date = now.toLocaleDateString('fr-FR')
+
+    // Si reply avec un chiffre → afficher sous-menu
+    const quoted = msg.message?.extendedTextMessage?.contextInfo
+    const repliedId = quoted?.stanzaId
+    const stored = menuMessages.get(jid)
+
+    if (repliedId && stored?.id === repliedId && args[0] && subMenus[args[0]]) {
+      return sock.sendMessage(jid, {
+        text: subMenus[args[0]]
+      }, { quoted: msg })
+    }
 
     const menuText = mainMenu(date, heure, isOwner, config.prefix)
     const imagePath = path.join(__dirname, '../../assets/escanor.jpg')
