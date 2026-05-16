@@ -14,8 +14,13 @@ const redis = new Redis({
 })
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-const question = (text) => new Promise(resolve => rl.question(text, resolve))
-
+// Ligne ~17 — remplace la fonction question par ceci :
+const question = (text) => new Promise((resolve) => {
+  rl.question(text, (answer) => {
+    rl.close() // ferme immédiatement après la réponse
+    resolve(answer)
+  })
+})
 // ═══════════════════════════════════════════════
 // STATS GLOBALES — accessibles depuis botinfo.js
 // ═══════════════════════════════════════════════
