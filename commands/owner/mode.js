@@ -8,17 +8,10 @@ export default {
   alias: ['setmode'],
   desc: 'Changer le mode du bot',
   category: 'owner',
-  ownerOnly: true,
+  ownerOnly: false,
 
   async execute(sock, msg, args, { isOwner, senderJid }) {
     const jid = msg.key.remoteJid
-
-    // messageHandler gère déjà ownerOnly — on fait confiance à isOwner
-    if (!isOwner) {
-      return sock.sendMessage(jid, {
-        text: 'Tu n\'as pas accès à cette commande.'
-      }, { quoted: msg })
-    }
 
     const mode = args[0]?.toLowerCase()
 
