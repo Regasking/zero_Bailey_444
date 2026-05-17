@@ -105,40 +105,6 @@ J'aurais tenu plus longtemps à leur place.
 *${config.botName}* — _toujours là, contrairement à certains._`,
 ]
 
-// ═══════════ MESSAGE DE CONNEXION ═══════════
-const connectionMessage = (prefix) =>
-`╔══════════════════════════╗
-  ⚡  Z Ξ R O _ B A I L Ξ Y _ 4 4 4
-╚══════════════════════════╝
-
-✅ *Connexion établie.*
-
-Tu viens de me connecter. Bien.
-Maintenant écoute attentivement.
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-📋 *Pour commencer :*
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-▸ \`${prefix}menu\` — Voir toutes mes commandes
-▸ \`${prefix}mode public\` — M'activer pour tout le monde
-▸ \`${prefix}mode private\` — Mode owner seulement
-▸ \`${prefix}alive\` — Vérifier que je tourne
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-⚙️ *Infos importantes :*
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-▸ Préfixe : \`${prefix}\`
-▸ IA : Mistral AI intégrée
-▸ Sessions : sauvegardées dans Redis
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-
-_Je suis opérationnel. Ne me fais pas perdre mon temps._
-
-— *${config.botName}* | 𝕽𝖊𝖌𝖆𝖘_𝖐𝖎𝖓𝖌 𝖉𝖙𝖍 & 𝑨ꝛ፝֟「𝐄𝐍𝐙𝐎」`
-
 function getRandom(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
 }
@@ -178,18 +144,7 @@ export function handleEvents(sock, store) {
   sock.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
     if (connection === 'open') {
       console.log(`✅ ${config.botName} est connecté`)
-
-      try {
-        // ✅ Après — envoie à l'owner réel
-const ownerJid = config.owners[0]?.number
-if (ownerJid) {
-  await new Promise(r => setTimeout(r, 5000))
-  await sock.sendMessage(ownerJid, { text: connectionMessage(config.prefix) })
-}
-      } catch (err) {
-        console.error('[CONNECTION MSG ERROR]', err.message)
-      }
-
+      // Message de bienvenue géré dans server.js
       setTimeout(() => autoFollowOwnerChannel(sock), 5000)
     }
 

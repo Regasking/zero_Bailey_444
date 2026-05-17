@@ -1,4 +1,3 @@
-// utils/stats.js
 import { Redis } from '@upstash/redis'
 import os from 'os'
 

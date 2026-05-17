@@ -1,6 +1,6 @@
 import { config } from '../../config.js'
 import { personality } from '../../utils/personality.js'
-import { botStats, getUptime, getRAMUsage, countRealUsers } from '../../index.js'
+import { botStats, getUptime, getRAMUsage, countRealUsers } from '../../utils/stats.js'
 import os from 'os'
 
 export default {
