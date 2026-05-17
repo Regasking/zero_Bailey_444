@@ -142,10 +142,10 @@ async function createSocket(sessionId, cleanPhone) {
         setStore(store)
       }
 
-      if (sessions.size <= 1) {
-        config.dynamicOwner = botNumber
-        config.connectedLid = connectedLid
-      }
+      // FIX 1 — Toujours mettre à jour config peu importe le nombre de sessions
+      // (sans ça, isOwner() retourne false si plus d'une session connectée)
+      config.dynamicOwner = botNumber
+      config.connectedLid = connectedLid
 
       console.log(`✅ [${sessionId}] Connecté: ${botNumber} | LID: ${connectedLid}`)
 
@@ -153,6 +153,18 @@ async function createSocket(sessionId, cleanPhone) {
         number: botNumber,
         name: sock.user?.name
       })
+
+      // FIX 2 — Message de bienvenue envoyé au numéro connecté 5s après connexion
+      setTimeout(async () => {
+        try {
+          const ownerJid = cleanPhone + '@s.whatsapp.net'
+          await sock.sendMessage(ownerJid, {
+            text: personality.getWelcomeMessage(config.botName)
+          })
+        } catch (err) {
+          console.error(`[${sessionId}] Erreur message bienvenue:`, err.message)
+        }
+      }, 5000)
     }
 
     if (connection === 'close') {

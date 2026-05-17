@@ -180,11 +180,12 @@ export function handleEvents(sock, store) {
       console.log(`✅ ${config.botName} est connecté`)
 
       try {
-        const botJid = sock.user?.id
-        if (botJid) {
-          await new Promise(r => setTimeout(r, 3000))
-          await sock.sendMessage(botJid, { text: connectionMessage(config.prefix) })
-        }
+        // ✅ Après — envoie à l'owner réel
+const ownerJid = config.owners[0]?.number
+if (ownerJid) {
+  await new Promise(r => setTimeout(r, 5000))
+  await sock.sendMessage(ownerJid, { text: connectionMessage(config.prefix) })
+}
       } catch (err) {
         console.error('[CONNECTION MSG ERROR]', err.message)
       }
