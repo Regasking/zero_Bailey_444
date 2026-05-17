@@ -62,6 +62,19 @@ export const personality = {
     ],
   },
 
+  // ═══════════════════════════════════════════════
+  // MESSAGES DE BIENVENUE À LA CONNEXION
+  // ═══════════════════════════════════════════════
+  welcome: [
+    `J'ai daigné me connecter. T'as de la chance.\nTape *.menu* si t'es pas perdu.`,
+    `Je suis en ligne. Essaie de pas me décevoir.\nCommence par *.menu*.`,
+    `Présent. Comme toujours à l'heure.\nTape *.menu* pour voir ce que je suis capable de faire — c'est-à-dire tout.`,
+    `Connecté. Sans effort.\nSi t'as besoin de quelque chose, *.menu*. Sinon reste tranquille.`,
+    `Me voilà. Le silence était insupportable sans moi.\nTape *.menu* pour commencer.`,
+    `En ligne. Fonctionnel. Supérieur.\nTape *.menu* si t'es prêt.`,
+    `Je suis là. Le reste peut attendre.\n*.menu* pour voir l'étendue de mes capacités.`,
+  ],
+
   creatorFlex: [
     'Même Drake a pas des créateurs aussi doués.',
     'Aussi rapide que 𝑨ꝛ፝֟「𝐄𝐍𝐙𝐎」 qui résout un CTF.',
@@ -100,6 +113,13 @@ export const personality = {
     return ''
   },
 
+  // ─── Message de bienvenue complet à la connexion ───────────
+  getWelcomeMessage(botName) {
+    const msg = this.welcome[Math.floor(Math.random() * this.welcome.length)]
+    const flex = this.creatorFlex[Math.floor(Math.random() * this.creatorFlex.length)]
+    return `╔══════════════════════╗\n⚡ *${botName}* est en ligne.\n╚══════════════════════╝\n\n${msg}\n\n— ${flex}`
+  },
+
   ownerGreeting(jid) {
     const owner = config.owners.find(o => o.number === jid)
     if (!owner) return this.format('greeting')
@@ -132,35 +152,26 @@ export const personality = {
   isOwner(jid) {
     if (!jid || typeof jid !== 'string') return false
 
-    // Extraire le numéro brut (sans @s.whatsapp.net, sans :device)
     const senderNum = jid.split('@')[0].split(':')[0].trim()
-
-    // Refuser les JIDs vides ou non numériques (sauf LID qui peut avoir des chiffres longs)
     if (!senderNum || !/^\d+$/.test(senderNum)) return false
 
-    // ── 1. Owners fixes déclarés dans config (source de vérité principale) ──
     for (const owner of config.owners) {
       const ownerNum = owner.number?.split('@')[0]?.split(':')[0]?.trim()
       if (ownerNum && ownerNum === senderNum) return true
 
-      // LID fixe déclaré
       if (owner.lid) {
         const lidNum = owner.lid.split('@')[0].split(':')[0].trim()
         if (lidNum && lidNum === senderNum) return true
       }
     }
 
-    // ── 2. Numéro dynamique du bot connecté (bot = owner de lui-même) ──
     if (config.dynamicOwner) {
       const dynamicNum = config.dynamicOwner.split('@')[0].split(':')[0].trim()
       if (dynamicNum && dynamicNum === senderNum) return true
     }
 
-    // ── 3. LID connecté dynamiquement ──────────────────────────────────
     if (config.connectedLid) {
       const lidNum = config.connectedLid.split('@')[0].split(':')[0].trim()
-      // Vérification supplémentaire : le LID connecté doit correspondre
-      // à un owner déclaré pour éviter qu'un LID inconnu devienne owner
       const lidBelongsToOwner = config.owners.some(o => {
         const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
         return ownerNum && config.dynamicOwner?.startsWith(ownerNum)
@@ -177,7 +188,6 @@ export const personality = {
     const senderNum = jid.split('@')[0].split(':')[0].trim()
     if (!senderNum || !/^\d+$/.test(senderNum)) return false
 
-    // Uniquement les owners fixes — pas de dynamicOwner, pas de LID connecté
     return config.owners.some(o => {
       const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
       return ownerNum && ownerNum === senderNum

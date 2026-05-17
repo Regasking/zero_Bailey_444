@@ -1,7 +1,6 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from 'baileys'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
-import readline from 'readline'
 import { loadCommands, setStore, addToStore } from './handlers/messageHandler.js'
 import { handleEvents } from './handlers/eventHandler.js'
 import { config } from './config.js'
@@ -13,14 +12,6 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
 })
 
-const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
-// Ligne ~17 — remplace la fonction question par ceci :
-const question = (text) => new Promise((resolve) => {
-  rl.question(text, (answer) => {
-    rl.close() // ferme immédiatement après la réponse
-    resolve(answer)
-  })
-})
 // ═══════════════════════════════════════════════
 // STATS GLOBALES — accessibles depuis botinfo.js
 // ═══════════════════════════════════════════════
@@ -89,10 +80,6 @@ async function updateGroupStats(sock) {
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState('./sessions')
   const { version } = await fetchLatestBaileysVersion()
-
-  if (!phoneNumber && !state.creds.registered) {
-    phoneNumber = await question('📱 Entre ton numéro (ex: 50955442656) : ')
-  }
 
   const sock = makeWASocket({
     version,
@@ -185,5 +172,3 @@ async function startBot() {
   setStore(store)
   handleEvents(sock, store)
 }
-
-startBot()
