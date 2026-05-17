@@ -31,7 +31,6 @@ export async function loadCommands() {
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
 
     for (const file of files) {
-      // Sanitize nom de fichier — évite path traversal
       if (!/^[\w\-]+\.js$/.test(file)) {
         console.warn(`[SECURITY] Fichier ignoré (nom suspect) : ${file}`)
         continue
@@ -51,8 +50,7 @@ export async function loadCommands() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FIX 1 — COOLDOWN PAR SENDER RÉEL (pas remoteJid)
-// FIX 2 — RATE LIMIT PAR COMMANDE
+// COOLDOWN PAR SENDER RÉEL
 // ═══════════════════════════════════════════════════════════════
 const cooldowns    = new Map()
 const cmdCooldowns = new Map()
@@ -82,7 +80,7 @@ function isOnCmdCooldown(senderJid, cmdName) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FIX 3 — STORE BORNÉ (max 500 entrées)
+// STORE BORNÉ (max 500 entrées)
 // ═══════════════════════════════════════════════════════════════
 const MAX_STORE_SIZE = 500
 
@@ -95,7 +93,7 @@ export function addToStore(store, key, value) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// FIX 4 — AUDIT LOG COMMANDES OWNER
+// AUDIT LOG COMMANDES OWNER
 // ═══════════════════════════════════════════════════════════════
 const OWNER_CMDS = new Set(['eval', 'exec', 'run', 'broadcast', 'bc', 'restart', 'maintenance', 'mode', 'sudo'])
 const AUDIT_TTL  = 60 * 60 * 24 * 30
@@ -149,7 +147,6 @@ export async function handleMessage(sock, msg) {
       || ''
 
     const jid       = msg.key.remoteJid
-    // FIX 1 : senderJid = expéditeur réel, pas le groupe
     const senderJid = msg.key.participant || msg.key.remoteJid
     const quotedId  = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
 
@@ -203,15 +200,15 @@ export async function handleMessage(sock, msg) {
     } catch {}
 
     // Premier contact
-try {
-  const seen = await redis.get(`seen:${senderJid}`)
-  if (!seen) {
-    await redis.set(`seen:${senderJid}`, '1', { ex: 60 * 60 * 24 * 365 })
-    await sock.sendMessage(senderJid, {   // ← sock direct, pas sockProxy
-      text: `╔══════════════════════╗\n  ⚡  B I E N V E N U E\n╚══════════════════════╝\n\nTu viens d'activer *${config.botName}*.\n\nJe suis opérationnel. Ne me fais pas perdre mon temps.\n\n▸ *${config.prefix}menu* — Voir mes commandes\n▸ *${config.prefix}alive* — Vérifier mon statut\n\n— *${config.botName}*\n_𝘊𝘰𝘯𝘴𝘵𝘳𝘶𝘪𝘵 𝘱𝘢𝘳 𝘭𝘦𝘴 𝘮𝘦𝘪𝘭𝘭𝘦𝘶𝘳𝘴._`
-    })
-  }
-} catch {}
+    try {
+      const seen = await redis.get(`seen:${senderJid}`)
+      if (!seen) {
+        await redis.set(`seen:${senderJid}`, '1', { ex: 60 * 60 * 24 * 365 })
+        await sock.sendMessage(senderJid, {
+          text: `╔══════════════════════╗\n  ⚡  B I E N V E N U E\n╚══════════════════════╝\n\nTu viens d'activer *${config.botName}*.\n\nJe suis opérationnel. Ne me fais pas perdre mon temps.\n\n▸ *${config.prefix}menu* — Voir mes commandes\n▸ *${config.prefix}alive* — Vérifier mon statut\n\n— *${config.botName}*\n_𝘊𝘰𝘯𝘴𝘵𝘳𝘶𝘪𝘵 𝘱𝘢𝘳 𝘭𝘦𝘴 𝘮𝘦𝘪𝘭𝘭𝘦𝘶𝘳𝘴._`
+        })
+      }
+    } catch {}
 
     // Mode maintenance
     try {
@@ -226,7 +223,7 @@ try {
     const cmdName = args.shift().toLowerCase()
     const isOwner = personality.isOwner(senderJid)
 
-    // FIX 1 — Cooldown global par sender réel
+    // Cooldown global par sender réel
     if (!isOwner && isOnCooldown(senderJid)) return
 
     const command = commands.get(cmdName)
@@ -249,7 +246,7 @@ try {
       return
     }
 
-    // FIX 2 — Rate limit par commande
+    // Rate limit par commande
     if (!isOwner && isOnCmdCooldown(senderJid, cmdName)) {
       const limit = CMD_LIMITS[cmdName]
       await sock.sendMessage(jid, {
@@ -258,9 +255,10 @@ try {
       return
     }
 
-    // Mode
+    // ✅ FIX MODE — lecture depuis Redis via getBotMode()
     try {
-      const { botMode } = await import('../commands/owner/mode.js')
+      const { getBotMode } = await import('../commands/owner/mode.js')
+      const botMode = await getBotMode()
       const isGroup = jid.endsWith('@g.us')
       if (botMode === 'private' && !isOwner) return
       if (botMode === 'group' && !isGroup && !isOwner) {
@@ -268,7 +266,7 @@ try {
       }
     } catch {}
 
-    // FIX 4 — Audit log commandes owner sensibles
+    // Audit log commandes owner sensibles
     if (isOwner && OWNER_CMDS.has(cmdName)) {
       await auditLog(senderJid, cmdName, args)
     }
@@ -293,6 +291,3 @@ try {
     console.error('[MESSAGE HANDLER ERROR]', err)
   }
 }
-
-// NOTE: loadCommands() est appelé explicitement depuis index.js
-// Ne pas l'appeler ici pour éviter le double chargement
