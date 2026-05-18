@@ -1,5 +1,5 @@
-import { personality } from '../../utils/personality.js'
 import { config } from '../../config.js'
+import { personality } from '../../utils/personality.js'
 import { Redis } from '@upstash/redis'
 
 const redis = new Redis({
@@ -7,56 +7,71 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
 })
 
-// Valeur en mémoire — initialisée depuis Redis au premier appel
-let _botMode = null
+// Cache mémoire par sessionId
+const modeCache = new Map()
 
-export async function getBotMode() {
-  if (_botMode) return _botMode
+export async function getBotMode(sessionId = null) {
+  const key = sessionId ? `mode:${sessionId}` : 'bot:mode'
+
+  if (modeCache.has(key)) return modeCache.get(key)
+
   try {
-    const saved = await redis.get('bot:mode')
-    _botMode = saved || (config.settings.publicMode ? 'public' : 'private')
+    const saved = await redis.get(key)
+    const mode = saved || (config.settings?.publicMode ? 'public' : 'public')
+    modeCache.set(key, mode)
+    return mode
   } catch {
-    _botMode = config.settings.publicMode ? 'public' : 'private'
+    return 'public'
   }
-  return _botMode
 }
 
-export async function setBotMode(mode) {
-  _botMode = mode
-  try {
-    await redis.set('bot:mode', mode)
-  } catch {}
+export async function setBotMode(mode, sessionId = null) {
+  const key = sessionId ? `mode:${sessionId}` : 'bot:mode'
+  await redis.set(key, mode)
+  modeCache.set(key, mode)
 }
 
 export default {
   name: 'mode',
   alias: ['setmode'],
-  desc: 'Changer le mode du bot',
+  desc: 'Mettre ton bot en mode public / private / group',
   category: 'owner',
-  ownerOnly: false,
+  ownerOnly: false, // chaque owner de session peut l'utiliser
 
-  async execute(sock, msg, args, { isOwner, senderJid }) {
+  async execute(sock, msg, args, { isOwner, isSessionOwner, senderJid, sessionId }) {
     const jid = msg.key.remoteJid
-    const currentMode = await getBotMode()
     const mode = args[0]?.toLowerCase()
+    const validModes = ['public', 'private', 'group']
 
-    if (!mode || !['public', 'private', 'group'].includes(mode)) {
+    // Afficher le mode actuel
+    if (!mode || !validModes.includes(mode)) {
+      const currentMode = await getBotMode(sessionId)
       return sock.sendMessage(jid, {
-        text: `⚙️ *Mode actuel :* ${currentMode}\n\nUtilisation : ${config.prefix}mode public/private/group\n\n▸ *public* — Tout le monde\n▸ *private* — Owners seulement\n▸ *group* — Groupes seulement`
+        text: `Mon mode actuel : *${currentMode}*.\n\nTu veux le changer ? Bien sûr que tu veux.\n\n▸ *${config.prefix}mode public* — Tout le monde a accès. Même ceux qui méritent pas.\n▸ *${config.prefix}mode private* — Toi seul. Comme il se doit.\n▸ *${config.prefix}mode group* — Groupes uniquement.\n\n— *${config.botName}*`
       }, { quoted: msg })
     }
 
-    // Seul l'owner peut changer le mode
-    if (!isOwner) {
+    // Vérification : seul l'owner de la session peut changer le mode
+    if (!isOwner && !isSessionOwner) {
       return sock.sendMessage(jid, {
-        text: personality.format('error_usage')
+        text: `Tu peux pas me donner des ordres. Sais-tu seulement qui je suis ?\n\n— *${config.botName}*`
       }, { quoted: msg })
     }
 
-    await setBotMode(mode)
+    try {
+      await setBotMode(mode, sessionId)
 
-    await sock.sendMessage(jid, {
-      text: `✅ Mode changé en *${mode}*\n\n— ${personality.format('owner_cmd')}`
-    }, { quoted: msg })
+      const descriptions = {
+        public:  `Mode *public* activé. J'accepte les masses. Pour l'instant.\n\n— *${config.botName}*`,
+        private: `Mode *private*. Enfin. Je préfère travailler pour quelqu'un qui le mérite.\n\n— *${config.botName}*`,
+        group:   `Mode *group*. Les DM c'est surfait de toute façon.\n\n— *${config.botName}*`
+      }
+
+      await sock.sendMessage(jid, { text: descriptions[mode] }, { quoted: msg })
+    } catch {
+      await sock.sendMessage(jid, {
+        text: `Rare. Quelque chose a résisté. Ça n'arrivera plus.\n\n— *${config.botName}*`
+      }, { quoted: msg })
+    }
   }
 }

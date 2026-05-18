@@ -9,18 +9,19 @@ export const config = {
 
   owners: [
     {
-      number: process.env.OWNER1_NUMBER + '@s.whatsapp.net',
-      lid: process.env.OWNER1_LID + '@lid',
+      number: process.env.OWNER1_NUMBER ? process.env.OWNER1_NUMBER.trim() + '@s.whatsapp.net' : null,
+      lid: process.env.OWNER1_LID ? process.env.OWNER1_LID.trim() + '@lid' : null,
+      lid2: process.env.OWNER1_LID2 ? process.env.OWNER1_LID2.trim() + '@lid' : null,
       name: '𝕽𝖊𝖌𝖆𝖘_𝖐𝖎𝖓𝖌 𝖉𝖙𝖍',
       role: 'owner'
     },
     {
-      number: process.env.OWNER2_NUMBER + '@s.whatsapp.net',
-      lid: process.env.OWNER2_LID + '@lid',
+      number: process.env.OWNER2_NUMBER ? process.env.OWNER2_NUMBER.trim() + '@s.whatsapp.net' : null,
+      lid: process.env.OWNER2_LID ? process.env.OWNER2_LID.trim() + '@lid' : null,
       name: '𝑨ꝛ፝֟「𝐄 𝐍 𝐙 𝐎•⁴ ⁴ ⁴」•𓆪𓃵',
       role: 'co-owner'
     }
-  ],
+  ].filter(o => o.number),
 
   // Rempli automatiquement au démarrage par server.js
   // Ne pas modifier manuellement

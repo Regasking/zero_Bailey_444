@@ -5,6 +5,7 @@ import { Server } from 'socket.io'
 import cors from 'cors'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import crypto from 'crypto'
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -19,14 +20,86 @@ import { loadCommands, setStore } from './handlers/messageHandler.js'
 import { handleEvents } from './handlers/eventHandler.js'
 import { config } from './config.js'
 
+// ═══════════ VALIDATION DES ENV VARS AU DÉMARRAGE ═══════════
+const REQUIRED_ENV = [
+  'UPSTASH_REDIS_REST_URL',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'OWNER1_NUMBER',
+]
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k])
+if (missingEnv.length) {
+  console.error(`[BOOT] Variables manquantes : ${missingEnv.join(', ')}`)
+  process.exit(1)
+}
+
+// ═══════════ LOGGER STRUCTURÉ ═══════════
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const httpServer = createServer(app)
-const io = new Server(httpServer, { cors: { origin: '*' } })
 
-app.use(cors())
-app.use(express.json())
+// ═══════════ CORS RESTREINT ═══════════
+const io = new Server(httpServer, {
+  cors: { origin: '*', credentials: false }
+})
+
+app.use(cors({ origin: '*' }))
+app.use(express.json({ limit: '1mb' }))
 app.use(express.static(path.join(__dirname, 'public')))
+
+// ═══════════ RATE LIMITING API ═══════════
+const apiRateLimits = new Map()
+const API_WINDOW_MS = 60 * 1000
+const API_MAX_REQ   = 30
+
+function apiRateLimit(req, res, next) {
+  const ip  = req.ip || 'unknown'
+  const now = Date.now()
+  const rec = apiRateLimits.get(ip)
+  if (!rec || now > rec.resetAt) {
+    apiRateLimits.set(ip, { count: 1, resetAt: now + API_WINDOW_MS })
+    return next()
+  }
+  if (rec.count >= API_MAX_REQ) {
+    return res.status(429).json({ success: false, error: 'Trop de requêtes' })
+  }
+  rec.count++
+  next()
+}
+
+setInterval(() => {
+  const now = Date.now()
+  for (const [ip, rec] of apiRateLimits) {
+    if (now > rec.resetAt) apiRateLimits.delete(ip)
+  }
+}, 5 * 60 * 1000)
+
+// ═══════════ AUTH MIDDLEWARE (désactivé — hébergement public Railway) ═══════════
+function requireAuth(req, res, next) {
+  next()
+}
+
+// ═══════════ CHIFFREMENT DES SESSIONS ═══════════
+const CIPHER_KEY = Buffer.from(
+  (process.env.SESSION_CIPHER_KEY || 'zero_bailey_default_key_railway!!').trim().padEnd(32, '0').slice(0, 32)
+)
+const CIPHER_ALG  = 'aes-256-cbc'
+
+function encryptSession(data) {
+  const iv  = crypto.randomBytes(16)
+  const enc = crypto.createCipheriv(CIPHER_ALG, CIPHER_KEY, iv)
+  const buf  = Buffer.concat([enc.update(data, 'utf8'), enc.final()])
+  return iv.toString('hex') + ':' + buf.toString('hex')
+}
+
+function decryptSession(data) {
+  const [ivHex, encHex] = data.split(':')
+  const iv  = Buffer.from(ivHex, 'hex')
+  const enc = Buffer.from(encHex, 'hex')
+  const dec = crypto.createDecipheriv(CIPHER_ALG, CIPHER_KEY, iv)
+  return Buffer.concat([dec.update(enc), dec.final()]).toString('utf8')
+}
 
 // ═══════════ REDIS CLIENT ═══════════
 const redis = new Redis({
@@ -34,7 +107,7 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
 })
 
-// ═══════════ PERSISTANCE SESSION ═══════════
+// ═══════════ SESSIONS (chiffrées) ═══════════
 
 async function saveSession(sessionId, sessionPath, phone) {
   try {
@@ -42,14 +115,14 @@ async function saveSession(sessionId, sessionPath, phone) {
     const files = fs.readdirSync(sessionPath)
     const creds = {}
     for (const file of files) {
-      const filePath = path.join(sessionPath, file)
-      creds[file] = fs.readFileSync(filePath, 'utf8')
+      creds[file] = fs.readFileSync(path.join(sessionPath, file), 'utf8')
     }
     creds['__phone__'] = phone
-    await redis.set(`session:${sessionId}`, JSON.stringify(creds))
-    console.log(`[Redis] Session ${sessionId} sauvegardée`)
+    const encrypted = encryptSession(JSON.stringify(creds))
+    await redis.set(`session:${sessionId}`, encrypted)
+    logger.info({ sessionId }, '[Redis] Session sauvegardée (chiffrée)')
   } catch (err) {
-    console.error('[Redis] Erreur save session:', err.message)
+    logger.error({ err: err.message }, '[Redis] Erreur save session')
   }
 }
 
@@ -57,15 +130,23 @@ async function loadSession(sessionId, sessionPath) {
   try {
     const data = await redis.get(`session:${sessionId}`)
     if (!data) return false
-    const creds = typeof data === 'string' ? JSON.parse(data) : data
+    const raw = typeof data === 'string' ? data : JSON.stringify(data)
+
+    let creds
+    try {
+      creds = JSON.parse(decryptSession(raw))
+    } catch {
+      creds = typeof data === 'string' ? JSON.parse(data) : data
+    }
+
     if (!fs.existsSync(sessionPath)) fs.mkdirSync(sessionPath, { recursive: true })
     for (const [file, content] of Object.entries(creds)) {
-      fs.writeFileSync(path.join(sessionPath, file), content)
+      if (file !== '__phone__') fs.writeFileSync(path.join(sessionPath, file), content)
     }
-    console.log(`[Redis] Session ${sessionId} rechargée`)
+    logger.info({ sessionId }, '[Redis] Session rechargée')
     return true
   } catch (err) {
-    console.error('[Redis] Erreur load session:', err.message)
+    logger.error({ err: err.message }, '[Redis] Erreur load session')
     return false
   }
 }
@@ -73,15 +154,15 @@ async function loadSession(sessionId, sessionPath) {
 async function deleteSession(sessionId) {
   try {
     await redis.del(`session:${sessionId}`)
-    console.log(`[Redis] Session ${sessionId} supprimée`)
+    logger.info({ sessionId }, '[Redis] Session supprimée')
   } catch (err) {
-    console.error('[Redis] Erreur delete session:', err.message)
+    logger.error({ err: err.message }, '[Redis] Erreur delete session')
   }
 }
 
 const sessions = new Map()
 
-// ═══════════ FONCTION CRÉATION SOCKET ═══════════
+// ═══════════ CRÉATION SOCKET ═══════════
 
 async function createSocket(sessionId, cleanPhone) {
   const sessionPath = `./sessions/${sessionId}`
@@ -121,55 +202,47 @@ async function createSocket(sessionId, cleanPhone) {
         try {
           const code = await sock.requestPairingCode(cleanPhone.trim())
           io.to(sessionId).emit('pairingCode', { code })
-          console.log(`[${sessionId}] Code: ${code}`)
+          logger.info({ sessionId }, '[Socket] Pairing code envoyé')
         } catch (err) {
-          io.to(sessionId).emit('error', { message: 'Erreur pairing code: ' + err.message })
+          io.to(sessionId).emit('error', { message: 'Erreur pairing: ' + err.message })
         }
       }, 5000)
     }
 
     if (connection === 'open') {
-      const botNumber = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
+      const botNumber    = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
       const connectedLid = sock.user?.lid?.split(':')[0] + '@lid'
 
       if (sessions.has(sessionId)) {
         const session = sessions.get(sessionId)
         session.connected = true
-        session.sock = sock
-        session.dynamicOwner = botNumber
-        session.connectedLid = connectedLid
-        session.store = store
+        session.sock      = sock
+        session.store     = store
         setStore(store)
       }
 
-      // FIX 1 — Toujours mettre à jour config peu importe le nombre de sessions
-      // (sans ça, isOwner() retourne false si plus d'une session connectée)
+      // NOTE : dynamicOwner sert uniquement pour les messages système
+      // Il N'EST PAS utilisé dans isOwner() — seuls config.owners est authorité
       config.dynamicOwner = botNumber
       config.connectedLid = connectedLid
 
-      console.log(`✅ [${sessionId}] Connecté: ${botNumber} | LID: ${connectedLid}`)
+      logger.info({ sessionId, botNumber }, '✅ Connecté')
+      io.to(sessionId).emit('connected', { number: botNumber, name: sock.user?.name })
 
-      io.to(sessionId).emit('connected', {
-        number: botNumber,
-        name: sock.user?.name
-      })
-
-      // FIX 2 — Message de bienvenue envoyé au numéro connecté 5s après connexion
       setTimeout(async () => {
         try {
-          const ownerJid = cleanPhone + '@s.whatsapp.net'
-          await sock.sendMessage(ownerJid, {
+          await sock.sendMessage(cleanPhone + '@s.whatsapp.net', {
             text: personality.getWelcomeMessage(config.botName)
           })
         } catch (err) {
-          console.error(`[${sessionId}] Erreur message bienvenue:`, err.message)
+          logger.error({ err: err.message }, 'Erreur message bienvenue')
         }
       }, 5000)
     }
 
     if (connection === 'close') {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-      console.log(`❌ [${sessionId}] Déconnecté — code: ${code}`)
+      logger.warn({ sessionId, code }, '❌ Déconnecté')
 
       if (sessions.get(sessionId)?.connected) return
 
@@ -180,13 +253,12 @@ async function createSocket(sessionId, cleanPhone) {
       } else {
         io.to(sessionId).emit('reconnecting')
         setTimeout(async () => {
-          console.log(`[${sessionId}] Reconnexion en cours...`)
           try {
             const newSock = await createSocket(sessionId, cleanPhone)
-            handleEvents(newSock, store)
+            handleEvents(newSock, store, sessionId, cleanPhone)
             if (sessions.has(sessionId)) sessions.get(sessionId).sock = newSock
           } catch (err) {
-            console.error(`[${sessionId}] Erreur reconnexion:`, err.message)
+            logger.error({ err: err.message }, 'Erreur reconnexion')
           }
         }, 3000)
       }
@@ -198,13 +270,13 @@ async function createSocket(sessionId, cleanPhone) {
     await saveSession(sessionId, sessionPath, cleanPhone)
   })
 
-  handleEvents(sock, store)
+  handleEvents(sock, store, sessionId, cleanPhone)
   return sock
 }
 
-// ═══════════ API ═══════════
+// ═══════════ ROUTES API ═══════════
 
-app.post('/api/session/create', async (req, res) => {
+app.post('/api/session/create', apiRateLimit, requireAuth, async (req, res) => {
   const { phone } = req.body
   if (!phone) return res.json({ success: false, error: 'Numéro requis' })
 
@@ -213,26 +285,29 @@ app.post('/api/session/create', async (req, res) => {
     return res.json({ success: false, error: 'Numéro invalide' })
   }
 
-  const sessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
+  // Pas de limite de sessions
+
+  const sessionId = 'sess_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex')
 
   try {
     const sock = await createSocket(sessionId, cleanPhone)
     const store = new Map()
     sessions.set(sessionId, { sock, connected: false, phone: cleanPhone, store })
+    logger.info({ sessionId }, '[API] Session créée')
     res.json({ success: true, sessionId })
   } catch (err) {
-    console.error(err)
+    logger.error({ err: err.message }, '[API] Erreur création')
     res.json({ success: false, error: err.message })
   }
 })
 
-app.get('/api/session/:sessionId', (req, res) => {
+app.get('/api/session/:sessionId', apiRateLimit, requireAuth, (req, res) => {
   const session = sessions.get(req.params.sessionId)
   if (!session) return res.json({ exists: false })
   res.json({ exists: true, connected: session.connected, phone: session.phone })
 })
 
-app.delete('/api/session/:sessionId', async (req, res) => {
+app.delete('/api/session/:sessionId', apiRateLimit, requireAuth, async (req, res) => {
   const session = sessions.get(req.params.sessionId)
   if (!session) return res.json({ success: false })
   try { await session.sock.logout() } catch {}
@@ -245,40 +320,54 @@ app.delete('/api/session/:sessionId', async (req, res) => {
 async function restoreSessions() {
   try {
     const keys = await redis.keys('session:*')
-    console.log(`[Redis] ${keys.length} session(s) à restaurer`)
-    for (const key of keys) {
-      const sessionId = key.replace('session:', '')
+    logger.info({ count: keys.length }, '[Redis] Sessions à restaurer')
+    if (!keys.length) return
+
+    // Récupérer toutes les données Redis en parallèle
+    const entries = await Promise.all(keys.map(async key => {
       const data = await redis.get(key)
-      if (!data) continue
-      const creds = typeof data === 'string' ? JSON.parse(data) : data
-      const phone = creds['__phone__'] || null
-      if (!phone) continue
+      return { key, data }
+    }))
+
+    // Lancer toutes les connexions WhatsApp en parallèle
+    await Promise.allSettled(entries.map(async ({ key, data }) => {
+      if (!data) return
+      const sessionId = key.replace('session:', '')
+
+      let phone = null
+      try {
+        const raw   = typeof data === 'string' ? data : JSON.stringify(data)
+        const creds = JSON.parse(decryptSession(raw))
+        phone = creds['__phone__'] || null
+      } catch {
+        try {
+          const creds = typeof data === 'string' ? JSON.parse(data) : data
+          phone = creds['__phone__'] || null
+        } catch {}
+      }
+
+      if (!phone) return
       try {
         const sock = await createSocket(sessionId, phone)
-        const store = new Map()
-        sessions.set(sessionId, { sock, connected: false, phone, store })
-        console.log(`[Redis] Session ${sessionId} restaurée`)
+        sessions.set(sessionId, { sock, connected: false, phone, store: new Map() })
+        logger.info({ sessionId }, '[Redis] Session restaurée')
       } catch (err) {
-        console.error(`[Redis] Erreur restauration ${sessionId}:`, err.message)
+        logger.error({ sessionId, err: err.message }, '[Redis] Erreur restauration')
       }
-    }
+    }))
+
   } catch (err) {
-    console.error('[Redis] Erreur restoreSessions:', err.message)
+    logger.error({ err: err.message }, '[Redis] Erreur restoreSessions')
   }
 }
 
 // ═══════════ SOCKET.IO ═══════════
 io.on('connection', (socket) => {
-  socket.on('join', (sessionId) => {
-    socket.join(sessionId)
-    console.log(`[Socket] Rejoint room: ${sessionId}`)
-  })
-  socket.on('joinRoom', (sessionId) => {
-    socket.join(sessionId)
-  })
+  socket.on('join', (sessionId) => socket.join(sessionId))
+  socket.on('joinRoom', (sessionId) => socket.join(sessionId))
 })
 
-// ═══════════ ROUTES ═══════════
+// ═══════════ SPA FALLBACK ═══════════
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
@@ -286,7 +375,7 @@ app.get('/{*splat}', (req, res) => {
 // ═══════════ START ═══════════
 const PORT = process.env.PORT || 3000
 httpServer.listen(PORT, async () => {
-  console.log(`🌐 Serveur lancé sur http://localhost:${PORT}`)
+  logger.info({ port: PORT }, '🌐 Serveur lancé')
   await loadCommands()
   await restoreSessions()
 })

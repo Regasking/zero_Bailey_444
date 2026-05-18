@@ -62,9 +62,6 @@ export const personality = {
     ],
   },
 
-  // ═══════════════════════════════════════════════
-  // MESSAGES DE BIENVENUE À LA CONNEXION
-  // ═══════════════════════════════════════════════
   welcome: [
     `J'ai daigné me connecter. T'as de la chance.\nTape *.menu* si t'es pas perdu.`,
     `Je suis en ligne. Essaie de pas me décevoir.\nCommence par *.menu*.`,
@@ -113,9 +110,8 @@ export const personality = {
     return ''
   },
 
-  // ─── Message de bienvenue complet à la connexion ───────────
   getWelcomeMessage(botName) {
-    const msg = this.welcome[Math.floor(Math.random() * this.welcome.length)]
+    const msg  = this.welcome[Math.floor(Math.random() * this.welcome.length)]
     const flex = this.creatorFlex[Math.floor(Math.random() * this.creatorFlex.length)]
     return `╔══════════════════════╗\n⚡ *${botName}* est en ligne.\n╚══════════════════════╝\n\n${msg}\n\n— ${flex}`
   },
@@ -133,7 +129,7 @@ export const personality = {
 
   ownerCommand(jid) {
     const owner = config.owners.find(o => o.number === jid)
-    const name = owner ? owner.name : 'patron'
+    const name  = owner ? owner.name : 'patron'
     return [
       `Exécuté pour ${name}. Pas de question.`,
       `Fait. ${name} a parlé.`,
@@ -142,12 +138,9 @@ export const personality = {
   },
 
   // ═══════════════════════════════════════════════════════════
-  // isOwner — vérification renforcée
-  // Règles de sécurité :
-  // 1. Le numéro doit être non vide et purement numérique (ou LID valide)
-  // 2. Comparaison stricte — pas de includes/startsWith
-  // 3. Le dynamicOwner (bot lui-même) est owner mais PAS les sudos non déclarés
-  // 4. Un JID vide ou malformé = refus systématique
+  // isOwner — CORRIGÉ : dynamicOwner RETIRÉ
+  // Le bot lui-même n'est PLUS considéré comme owner
+  // Seuls config.owners (hardcodés via .env) sont authorité
   // ═══════════════════════════════════════════════════════════
   isOwner(jid) {
     if (!jid || typeof jid !== 'string') return false
@@ -165,24 +158,14 @@ export const personality = {
       }
     }
 
-    if (config.dynamicOwner) {
-      const dynamicNum = config.dynamicOwner.split('@')[0].split(':')[0].trim()
-      if (dynamicNum && dynamicNum === senderNum) return true
-    }
-
-    if (config.connectedLid) {
-      const lidNum = config.connectedLid.split('@')[0].split(':')[0].trim()
-      const lidBelongsToOwner = config.owners.some(o => {
-        const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
-        return ownerNum && config.dynamicOwner?.startsWith(ownerNum)
-      })
-      if (lidBelongsToOwner && lidNum && lidNum === senderNum) return true
-    }
+    // ✅ FIX SÉCURITÉ : config.dynamicOwner (numéro du bot) retiré d'ici
+    // Avant : le bot lui-même était owner → usurpation possible
+    // Maintenant : seuls les owners déclarés dans config.owners ont le droit
 
     return false
   },
 
-  // Version stricte pour commandes ultra-sensibles (eval, restart, etc.)
+  // Version stricte pour commandes ultra-sensibles (eval, restart, broadcast)
   isHardOwner(jid) {
     if (!jid || typeof jid !== 'string') return false
     const senderNum = jid.split('@')[0].split(':')[0].trim()
@@ -190,7 +173,8 @@ export const personality = {
 
     return config.owners.some(o => {
       const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      return ownerNum && ownerNum === senderNum
+      const lidNum   = o.lid?.split('@')[0]?.split(':')[0]?.trim()
+      return (ownerNum && ownerNum === senderNum) || (lidNum && lidNum === senderNum)
     })
   }
 }

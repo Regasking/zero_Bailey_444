@@ -1,4 +1,5 @@
 import { personality } from '../../utils/personality.js'
+import { sendSanction } from '../../utils/sanctionImage.js'
 import { config } from '../../config.js'
 import { Redis } from '@upstash/redis'
 

@@ -132,7 +132,7 @@ async function autoReactNewsletterMessage(sock, msg) {
   } catch {}
 }
 
-export function handleEvents(sock, store) {
+export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null) {
 
   if (registeredSockets.has(sock)) {
     console.log('[EventHandler] Socket déjà enregistré, skip.')
@@ -171,11 +171,13 @@ export function handleEvents(sock, store) {
       // Cache pour anti-delete (groupes uniquement)
       cacheMessage(msg)
 
-      // Protections anti-* sur les messages de groupe
-      await handleMessageProtection(sock, msg)
+      // Protections anti-* sur les messages de groupe (non bloquant)
+      if (msg.key.remoteJid?.endsWith('@g.us')) {
+        handleMessageProtection(sock, msg).catch(() => {})
+      }
 
       // Traitement commande normal
-      await handleMessage(sock, msg)
+      await handleMessage(sock, msg, sessionId, sessionOwnerPhone)
     }
   })
 

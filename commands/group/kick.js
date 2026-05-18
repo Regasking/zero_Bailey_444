@@ -1,4 +1,5 @@
 import { personality } from '../../utils/personality.js'
+import { sendSanction } from '../../utils/sanctionImage.js'
 import { config } from '../../config.js'
 
 export default {
@@ -69,9 +70,7 @@ export default {
         }
       }
 
-      return sock.sendMessage(jid, {
-        text: `╔══════════════════════╗\n  ✅  K I C K  A L L\n╚══════════════════════╝\n\n▸ Expulsés : *${success}*\n▸ Échecs : *${failed}*\n\n— *${config.botName}* | _${personality.format('owner_cmd')}_`
-      })
+      return sendSanction(sock, jid, `╔══════════════════════╗\n  ✅  K I C K  A L L\n╚══════════════════════╝\n\n▸ Expulsés : *${success}*\n▸ Échecs : *${failed}*\n\n— *${config.botName}* | _${personality.format('owner_cmd')}_`)
     }
 
     // ── .kick @mention / reply ─────────────────────────────────
@@ -92,10 +91,7 @@ export default {
 
     try {
       await sock.groupParticipantsUpdate(jid, [target], 'remove')
-      await sock.sendMessage(jid, {
-        text: `✅ @${target.split('@')[0]} expulsé.\n\n— ${personality.format('owner_cmd')}`,
-        mentions: [target]
-      })
+      await sendSanction(sock, jid, `✅ @${target.split('@')[0]} expulsé.\n\n— ${personality.format('owner_cmd')}`, { quoted: msg, mentions: [target] })
     } catch {
       await sock.sendMessage(jid, { text: personality.format('error_technical') })
     }
