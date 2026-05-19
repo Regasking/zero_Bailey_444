@@ -132,7 +132,7 @@ async function autoReactNewsletterMessage(sock, msg) {
   } catch {}
 }
 
-export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null) {
+export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null) {
 
   if (registeredSockets.has(sock)) {
     console.log('[EventHandler] Socket déjà enregistré, skip.')
@@ -177,7 +177,7 @@ export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null) {
       }
 
       // Traitement commande normal
-      await handleMessage(sock, msg, sessionId, sessionOwnerPhone)
+      await handleMessage(sock, msg, sessionId, sessionOwnerPhone, sessionOwnerLid)
     }
   })
 

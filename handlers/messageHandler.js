@@ -17,12 +17,7 @@ const redis = new Redis({
 export let globalStore = null
 export function setStore(store) { globalStore = store }
 
-// ═══════════════════════════════════════════════════════════════
-// AUTO-LOADER
-// ═══════════════════════════════════════════════════════════════
 const commands = new Map()
-
-// Cache des modules dynamiques — chargés UNE seule fois au démarrage
 let _songModule       = null
 let _menuModule       = null
 let _settingsModule   = null
@@ -32,154 +27,82 @@ let _modeModule       = null
 
 export async function loadCommands() {
   const categories = ['general', 'group', 'media', 'games', 'tools', 'owner', 'ai']
-
   for (const category of categories) {
     const dir = path.join(__dirname, `../commands/${category}`)
     if (!fs.existsSync(dir)) continue
-
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'))
-
     for (const file of files) {
-      if (!/^[\w\-]+\.js$/.test(file)) {
-        console.warn(`[SECURITY] Fichier ignoré (nom suspect) : ${file}`)
-        continue
-      }
+      if (!/^[\w\-]+\.js$/.test(file)) { console.warn(`[SECURITY] Fichier ignoré : ${file}`); continue }
       try {
-        const cmd     = await import(`../commands/${category}/${file}`)
+        const cmd = await import(`../commands/${category}/${file}`)
         const command = cmd.default
         if (!command?.name || typeof command.execute !== 'function') continue
         commands.set(command.name, command)
         if (command.alias) command.alias.forEach(a => commands.set(a, command))
-      } catch (err) {
-        console.error(`[LOAD ERROR] ${category}/${file}:`, err.message)
-      }
+      } catch (err) { console.error(`[LOAD ERROR] ${category}/${file}:`, err.message) }
     }
   }
-
-  // Pré-chargement des modules fréquemment accédés
-  // Évite les import() dynamiques à chaque message (lent + inutile)
-  try { _songModule        = await import('../commands/media/song.js') }        catch {}
-  try { _menuModule        = await import('../commands/general/menu.js') }       catch {}
-  try { _settingsModule    = await import('../commands/general/settings.js') }   catch {}
-  try { _maintenanceModule = await import('../commands/owner/maintenance.js') }  catch {}
-  try { _rankModule        = await import('../commands/games/rank.js') }         catch {}
-  try { _modeModule        = await import('../commands/owner/mode.js') }         catch {}
-
+  try { _songModule        = await import('../commands/media/song.js') }       catch {}
+  try { _menuModule        = await import('../commands/general/menu.js') }      catch {}
+  try { _settingsModule    = await import('../commands/general/settings.js') }  catch {}
+  try { _maintenanceModule = await import('../commands/owner/maintenance.js') } catch {}
+  try { _rankModule        = await import('../commands/games/rank.js') }        catch {}
+  try { _modeModule        = await import('../commands/owner/mode.js') }        catch {}
   console.log(`✅ ${commands.size} commandes chargées`)
 }
 
-// ═══════════════════════════════════════════════════════════════
-// COOLDOWN PAR SENDER RÉEL + NETTOYAGE AUTO
-// ═══════════════════════════════════════════════════════════════
+// ═══════════ COOLDOWNS ═══════════
 const cooldowns    = new Map()
 const cmdCooldowns = new Map()
-
-const CMD_LIMITS = {
-  ai: 10, song: 15, csong: 15, tts: 5,
-  translate: 5, ocr: 10, sticker: 5, qr: 5, weather: 5,
-}
-
-// Nettoyage des Maps cooldown toutes les heures (évite la fuite mémoire)
+const CMD_LIMITS   = { ai: 10, song: 15, csong: 15, tts: 5, translate: 5, ocr: 10, sticker: 5, qr: 5, weather: 5 }
 setInterval(() => {
   const now = Date.now()
-  for (const [key, ts] of cooldowns) {
-    if (now - ts > config.settings.cooldown * 1000 * 10) cooldowns.delete(key)
-  }
-  for (const [key, ts] of cmdCooldowns) {
-    const cmdName = key.split(':').pop()
-    const limit   = CMD_LIMITS[cmdName] || 10
-    if (now - ts > limit * 1000 * 10) cmdCooldowns.delete(key)
-  }
+  for (const [k, ts] of cooldowns) if (now - ts > config.settings.cooldown * 10000) cooldowns.delete(k)
+  for (const [k, ts] of cmdCooldowns) { const l = CMD_LIMITS[k.split(':').pop()] || 10; if (now - ts > l * 10000) cmdCooldowns.delete(k) }
 }, 60 * 60 * 1000)
 
-function isOnCooldown(senderJid) {
-  const now  = Date.now()
-  const last = cooldowns.get(senderJid) || 0
+function isOnCooldown(jid) {
+  const now = Date.now(), last = cooldowns.get(jid) || 0
   if (now - last < config.settings.cooldown * 1000) return true
-  cooldowns.set(senderJid, now)
-  return false
+  cooldowns.set(jid, now); return false
 }
-
-function isOnCmdCooldown(senderJid, cmdName) {
-  const limit = CMD_LIMITS[cmdName]
-  if (!limit) return false
-  const key  = `${senderJid}:${cmdName}`
-  const now  = Date.now()
-  const last = cmdCooldowns.get(key) || 0
+function isOnCmdCooldown(jid, cmd) {
+  const limit = CMD_LIMITS[cmd]; if (!limit) return false
+  const key = `${jid}:${cmd}`, now = Date.now(), last = cmdCooldowns.get(key) || 0
   if (now - last < limit * 1000) return true
-  cmdCooldowns.set(key, now)
-  return false
+  cmdCooldowns.set(key, now); return false
 }
 
-// ═══════════════════════════════════════════════════════════════
-// CACHE MÉMOIRE LOCAL (évite les requêtes Redis répétitives)
-// ═══════════════════════════════════════════════════════════════
-const seenCache    = new Set()         // utilisateurs déjà vus (premier contact)
-const settingsCache = new Map()        // settings par JID
-
-// Nettoyage du cache settings toutes les heures
+// ═══════════ CACHE ═══════════
+const seenCache     = new Set()
+const settingsCache = new Map()
 setInterval(() => settingsCache.clear(), 60 * 60 * 1000)
 
-// ═══════════════════════════════════════════════════════════════
-// STORE BORNÉ (max 500 entrées)
-// ═══════════════════════════════════════════════════════════════
 const MAX_STORE_SIZE = 500
-
 export function addToStore(store, key, value) {
-  if (store.size >= MAX_STORE_SIZE) {
-    const firstKey = store.keys().next().value
-    store.delete(firstKey)
-  }
+  if (store.size >= MAX_STORE_SIZE) store.delete(store.keys().next().value)
   store.set(key, value)
 }
 
-// ═══════════════════════════════════════════════════════════════
-// AUDIT LOG COMMANDES OWNER
-// ═══════════════════════════════════════════════════════════════
+// ═══════════ AUDIT LOG ═══════════
 const OWNER_CMDS = new Set(['eval', 'exec', 'run', 'broadcast', 'bc', 'restart', 'maintenance', 'mode', 'sudo'])
-const AUDIT_TTL  = 60 * 60 * 24 * 30
-
 async function auditLog(senderJid, cmdName, args) {
   try {
-    await redis.set(
-      `audit:cmd:${Date.now()}`,
-      JSON.stringify({
-        sender: senderJid,
-        cmd: cmdName,
-        args: args.join(' ').slice(0, 200),
-        date: new Date().toISOString()
-      }),
-      { ex: AUDIT_TTL }
-    )
+    await redis.set(`audit:cmd:${Date.now()}`, JSON.stringify({ sender: senderJid, cmd: cmdName, args: args.join(' ').slice(0, 200), date: new Date().toISOString() }), { ex: 60 * 60 * 24 * 30 })
   } catch {}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// REACT EMOJIS
-// ═══════════════════════════════════════════════════════════════
-const categoryEmojis = {
-  general: ['⚡', '✨', '💫'],
-  group:   ['👥', '⚙️', '🔧'],
-  media:   ['🎵', '🎬', '📥'],
-  games:   ['🎮', '🎯', '🃏'],
-  tools:   ['🛠️', '🔍', '⚙️'],
-  owner:   ['👑', '⚡', '🔑'],
-  ai:      ['🤖', '💡', '🧠'],
-  default: ['⚡', '✅', '💯'],
-}
-
+// ═══════════ REACT ═══════════
+const categoryEmojis = { general: ['⚡','✨','💫'], group: ['👥','⚙️','🔧'], media: ['🎵','🎬','📥'], games: ['🎮','🎯','🃏'], tools: ['🛠️','🔍','⚙️'], owner: ['👑','⚡','🔑'], ai: ['🤖','💡','🧠'], default: ['⚡','✅','💯'] }
 async function reactToMessage(sock, msg, category = 'default') {
   try {
     const emojis = categoryEmojis[category] || categoryEmojis.default
-    const emoji  = emojis[Math.floor(Math.random() * emojis.length)]
-    await sock.sendMessage(msg.key.remoteJid, { react: { text: emoji, key: msg.key } })
+    await sock.sendMessage(msg.key.remoteJid, { react: { text: emojis[Math.floor(Math.random() * emojis.length)], key: msg.key } })
   } catch {}
 }
 
-// ═══════════════════════════════════════════════════════════════
-// HANDLE MESSAGE
-// ═══════════════════════════════════════════════════════════════
-export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPhone = null) {
+// ═══════════ HANDLE MESSAGE ═══════════
+export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPhone = null, sessionOwnerLid = null) {
   try {
     const body = msg.message?.conversation
       || msg.message?.extendedTextMessage?.text
@@ -191,8 +114,26 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
     const senderJid = msg.key.participant || msg.key.remoteJid
     const quotedId  = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
 
+    // ── senderNum et remoteNum ──────────────────────────────────
+    const senderNum = senderJid.split('@')[0].split(':')[0]
+    const remoteNum = jid.split('@')[0].split(':')[0] // numéro réel en DM
+    const sessionPhone = sessionOwnerPhone?.replace(/\D/g, '') || null
+
+    // ── isOwner : numéro OU lid hardcodé dans config ────────────
+    const isOwner = config.owners.some(o => {
+      const num = o.number?.split('@')[0]?.split(':')[0]?.trim()
+      const lid = o.lid?.split('@')[0]?.split(':')[0]?.trim()
+      return (num && (num === senderNum || num === remoteNum))
+          || (lid && (lid === senderNum || lid === remoteNum))
+    })
+
+    // ── isSessionOwner : isOwner OU LID/numéro de session ───────
+    // sessionOwnerLid = LID réel stocké au moment de la connexion WhatsApp
+    const isSessionOwner = isOwner
+      || (sessionPhone && (senderNum === sessionPhone || remoteNum === sessionPhone))
+      || (sessionOwnerLid && (senderNum === sessionOwnerLid || remoteNum === sessionOwnerLid))
+
     // ── FIX SONG ─────────────────────────────────────────────────
-    // Utilise le module pré-chargé au lieu d'import() dynamique
     if (_songModule && quotedId) {
       const { songSessions } = _songModule
       if (songSessions?.has(jid)) {
@@ -200,28 +141,6 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
         if (quotedId === session.menuId) {
           const songCmd = commands.get('song')
           if (songCmd) {
-            const senderNum = senderJid.split('@')[0].split(':')[0]
-    const sessionPhone = sessionOwnerPhone ? sessionOwnerPhone.replace(/\D/g, '') : null
-
-    // Vérifie si senderNum matche numéro OU lid OU lid2 de n'importe quel owner config
-    const isOwner = config.owners.some(o => {
-      const num  = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      const lid  = o.lid?.split('@')[0]?.split(':')[0]?.trim()
-      const lid2 = o.lid2?.split('@')[0]?.split(':')[0]?.trim()
-      return (num && num === senderNum) || (lid && lid === senderNum) || (lid2 && lid2 === senderNum)
-    })
-
-    // Owner de session = même logique + numéro saisi au dashboard
-    const isSessionOwner = isOwner || (sessionPhone && senderNum === sessionPhone)
-
-    console.log(`[CMD] ${senderNum} → .${cmdName} | isOwner=${isOwner} | isSessionOwner=${isSessionOwner} | sessionPhone=${sessionPhone}`)
-
-    // Blacklist globale — ignorer silencieusement
-    if (!isOwner && !isSessionOwner) {
-      try {
-        if (await isBlacklisted(senderNum)) return
-      } catch {}
-    }
             await reactToMessage(sock, msg, 'media')
             await songCmd.execute(sock, msg, [body.trim()], { isOwner, senderJid })
             return
@@ -246,17 +165,14 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
             '6': menuData.isOwner ? `👑 *OWNER*\n━━━━━━━━━━━━━━━━━━━━━\n▸ ${config.prefix}broadcast — Message global\n▸ ${config.prefix}restart — Redémarrer\n▸ ${config.prefix}sudo — Gérer admins\n▸ ${config.prefix}mode — public/private/group\n▸ ${config.prefix}maintenance — Mode maintenance\n▸ ${config.prefix}eval — Exécuter code` : null
           }
           const subMenu = subMenus[choice]
-          if (subMenu) {
-            await sock.sendMessage(jid, { text: subMenu }, { quoted: msg })
-            return
-          }
+          if (subMenu) { await sock.sendMessage(jid, { text: subMenu }, { quoted: msg }); return }
         }
       }
     }
 
     if (!body.startsWith(config.prefix)) return
 
-    // Langue user (cache mémoire d'abord, Redis seulement si absent)
+    // ── Langue user ───────────────────────────────────────────────
     if (_settingsModule && !settingsCache.has(senderJid)) {
       try {
         const { getUserSettings } = _settingsModule
@@ -265,11 +181,11 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
         if (userSettings.lang) setUserLang(senderJid, userSettings.lang)
       } catch {}
     } else if (_settingsModule && settingsCache.has(senderJid)) {
-      const userSettings = settingsCache.get(senderJid)
-      if (userSettings.lang) setUserLang(senderJid, userSettings.lang)
+      const s = settingsCache.get(senderJid)
+      if (s.lang) setUserLang(senderJid, s.lang)
     }
 
-    // Premier contact — fire and forget, ne bloque pas la commande
+    // ── Premier contact ───────────────────────────────────────────
     if (!seenCache.has(senderJid)) {
       seenCache.add(senderJid)
       redis.get(`seen:${senderJid}`).then(async seen => {
@@ -287,11 +203,11 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
       }).catch(() => {})
     }
 
-    // Mode maintenance (module pré-chargé)
+    // ── Maintenance ───────────────────────────────────────────────
     if (_maintenanceModule) {
       try {
         const { maintenanceMode } = _maintenanceModule
-        if (maintenanceMode && !personality.isOwner(senderJid)) {
+        if (maintenanceMode && !isOwner) {
           await sock.sendMessage(jid, { text: t(senderJid, 'maintenance') }, { quoted: msg })
           return
         }
@@ -300,39 +216,21 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
 
     const args    = body.slice(config.prefix.length).trim().split(/\s+/)
     const cmdName = args.shift().toLowerCase()
-    const senderNum = senderJid.split('@')[0].split(':')[0]
-    const sessionPhone = sessionOwnerPhone ? sessionOwnerPhone.replace(/\D/g, '') : null
 
-    // Vérifie si senderNum matche numéro OU lid OU lid2 de n'importe quel owner config
-    const isOwner = config.owners.some(o => {
-      const num  = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      const lid  = o.lid?.split('@')[0]?.split(':')[0]?.trim()
-      const lid2 = o.lid2?.split('@')[0]?.split(':')[0]?.trim()
-      return (num && num === senderNum) || (lid && lid === senderNum) || (lid2 && lid2 === senderNum)
-    })
+    console.log(`[CMD] ${senderNum} → .${cmdName} | isOwner=${isOwner} | isSessionOwner=${isSessionOwner} | lid=${sessionOwnerLid}`)
 
-    // Owner de session = même logique + numéro saisi au dashboard
-    const isSessionOwner = isOwner || (sessionPhone && senderNum === sessionPhone)
-
-    console.log(`[CMD] ${senderNum} → .${cmdName} | isOwner=${isOwner} | isSessionOwner=${isSessionOwner} | sessionPhone=${sessionPhone}`)
-
-    // Blacklist globale — ignorer silencieusement
+    // ── Blacklist ─────────────────────────────────────────────────
     if (!isOwner && !isSessionOwner) {
-      try {
-        if (await isBlacklisted(senderNum)) return
-      } catch {}
+      try { if (await isBlacklisted(senderNum)) return } catch {}
     }
 
-    // Cooldown global par sender réel
+    // ── Cooldown global ───────────────────────────────────────────
     if (!isOwner && isOnCooldown(senderJid)) return
 
     const command = commands.get(cmdName)
 
-    // XP — fire and forget, on n'attend pas Redis
-    if (_rankModule) {
-      const { addXP } = _rankModule
-      addXP(senderJid, 10).catch(() => {})
-    }
+    // ── XP fire-and-forget ────────────────────────────────────────
+    if (_rankModule) _rankModule.addXP(senderJid, 10).catch(() => {})
 
     if (!command) {
       reactToMessage(sock, msg, 'default').catch(() => {})
@@ -346,41 +244,31 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
       return
     }
 
-    // Rate limit par commande
     if (!isOwner && isOnCmdCooldown(senderJid, cmdName)) {
-      const limit = CMD_LIMITS[cmdName]
-      await sock.sendMessage(jid, {
-        text: `⏳ Attends *${limit}s* avant de réutiliser *${config.prefix}${cmdName}*.\n\n— *${config.botName}*`
-      }, { quoted: msg })
+      await sock.sendMessage(jid, { text: `⏳ Attends *${CMD_LIMITS[cmdName]}s* avant de réutiliser *${config.prefix}${cmdName}*.\n\n— *${config.botName}*` }, { quoted: msg })
       return
     }
 
-    // Mode bot — par session (chaque abonné contrôle son propre bot)
+    // ── Mode bot par session ──────────────────────────────────────
     if (_modeModule) {
       try {
         const { getBotMode } = _modeModule
         const botMode = await getBotMode(sessionId)
         const isGroup = jid.endsWith('@g.us')
-        // private : seul l'owner de session peut utiliser le bot
-        if (botMode === 'private' && !isSessionOwner) {
-          // Silencieux — on répond rien pour pas confirmer que le bot existe
-          return
-        }
+        if (botMode === 'private' && !isSessionOwner) return // silencieux
         if (botMode === 'group' && !isGroup && !isSessionOwner) {
           return sock.sendMessage(jid, { text: `Je travaille en groupe uniquement. Va dans un groupe.\n\n— *${config.botName}*` }, { quoted: msg })
         }
       } catch {}
     }
 
-    // Audit log — fire and forget
-    if (isOwner && OWNER_CMDS.has(cmdName)) {
-      auditLog(senderJid, cmdName, args).catch(() => {})
-    }
+    // ── Audit log ─────────────────────────────────────────────────
+    if (isOwner && OWNER_CMDS.has(cmdName)) auditLog(senderJid, cmdName, args).catch(() => {})
 
-    // React — fire and forget, on n'attend pas avant d'exécuter la commande
+    // ── React ─────────────────────────────────────────────────────
     reactToMessage(sock, msg, command.category || 'default').catch(() => {})
 
-    // Proxy local (auto-quote)
+    // ── Proxy auto-quote ──────────────────────────────────────────
     const sockProxy = new Proxy(sock, {
       get(target, prop) {
         if (prop !== 'sendMessage') return target[prop]

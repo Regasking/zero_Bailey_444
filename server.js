@@ -214,12 +214,17 @@ async function createSocket(sessionId, cleanPhone) {
     if (connection === 'open') {
       const botNumber    = sock.user?.id?.split(':')[0] + '@s.whatsapp.net'
       const connectedLid = sock.user?.lid?.split(':')[0] + '@lid'
+      // LID réel du propriétaire de cette session (celui qui a scanné le QR)
+      const ownerLid     = sock.user?.lid?.split(':')[0]?.split('@')[0]?.trim()
+      const ownerPhone   = cleanPhone?.replace(/\D/g, '')
 
       if (sessions.has(sessionId)) {
         const session = sessions.get(sessionId)
-        session.connected = true
-        session.sock      = sock
-        session.store     = store
+        session.connected  = true
+        session.sock       = sock
+        session.store      = store
+        session.ownerLid   = ownerLid   // LID réel stocké à la connexion
+        session.ownerPhone = ownerPhone
         setStore(store)
       }
 
@@ -278,7 +283,7 @@ async function createSocket(sessionId, cleanPhone) {
         setTimeout(async () => {
           try {
             const newSock = await createSocket(sessionId, cleanPhone)
-            handleEvents(newSock, store, sessionId, cleanPhone)
+            handleEvents(newSock, store, sessionId, cleanPhone, sessions.get(sessionId)?.ownerLid)
             if (sessions.has(sessionId)) sessions.get(sessionId).sock = newSock
             reconnectAttempts.delete(sessionId) // reset après succès
           } catch (err) {
@@ -296,7 +301,7 @@ async function createSocket(sessionId, cleanPhone) {
     await saveSession(sessionId, sessionPath, cleanPhone)
   })
 
-  handleEvents(sock, store, sessionId, cleanPhone)
+  handleEvents(sock, store, sessionId, cleanPhone, ownerLid)
   return sock
 }
 
