@@ -161,6 +161,8 @@ async function deleteSession(sessionId) {
 }
 
 const sessions = new Map()
+const reconnectAttempts = new Map() // compteur tentatives par session
+const reconnectTimers = new Map()   // keepalive intervals par session
 
 // ═══════════ CRÉATION SOCKET ═══════════
 
@@ -226,6 +228,14 @@ async function createSocket(sessionId, cleanPhone) {
       config.dynamicOwner = botNumber
       config.connectedLid = connectedLid
 
+      // Keepalive — ping toutes les 25 min pour éviter le timeout Railway
+      reconnectAttempts.delete(sessionId)
+      if (reconnectTimers.has(sessionId)) clearInterval(reconnectTimers.get(sessionId))
+      const keepalive = setInterval(() => {
+        try { sock.sendPresenceUpdate('available') } catch {}
+      }, 25 * 60 * 1000)
+      reconnectTimers.set(sessionId, keepalive)
+
       logger.info({ sessionId, botNumber }, '✅ Connecté')
       io.to(sessionId).emit('connected', { number: botNumber, name: sock.user?.name })
 
@@ -244,25 +254,41 @@ async function createSocket(sessionId, cleanPhone) {
       const code = new Boom(lastDisconnect?.error)?.output?.statusCode
       logger.warn({ sessionId, code }, '❌ Déconnecté')
 
-      if (sessions.get(sessionId)?.connected) return
+      // Nettoyer le keepalive
+      if (reconnectTimers.has(sessionId)) {
+        clearInterval(reconnectTimers.get(sessionId))
+        reconnectTimers.delete(sessionId)
+      }
 
       if (code === DisconnectReason.loggedOut) {
+        // Session expirée — pas de reconnexion
         await deleteSession(sessionId)
         sessions.delete(sessionId)
         io.to(sessionId).emit('disconnected')
+        logger.warn({ sessionId }, '🔒 Session expirée — reconnexion manuelle requise')
       } else {
+        // Déconnexion réseau (Railway timeout, etc.) — reconnexion avec backoff
+        const attempt = reconnectAttempts.get(sessionId) || 0
+        const delay = Math.min(3000 * Math.pow(2, attempt), 60000) // max 60s
+        reconnectAttempts.set(sessionId, attempt + 1)
+
+        logger.info({ sessionId, attempt, delay }, '🔄 Reconnexion dans ' + (delay/1000) + 's...')
         io.to(sessionId).emit('reconnecting')
+
         setTimeout(async () => {
           try {
             const newSock = await createSocket(sessionId, cleanPhone)
             handleEvents(newSock, store, sessionId, cleanPhone)
             if (sessions.has(sessionId)) sessions.get(sessionId).sock = newSock
+            reconnectAttempts.delete(sessionId) // reset après succès
           } catch (err) {
-            logger.error({ err: err.message }, 'Erreur reconnexion')
+            logger.error({ sessionId, err: err.message }, 'Erreur reconnexion')
           }
-        }, 3000)
+        }, delay)
       }
     }
+
+
   })
 
   sock.ev.on('creds.update', async () => {
@@ -371,6 +397,31 @@ io.on('connection', (socket) => {
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
+
+
+// ═══════════ SYSCAST POLLING ═══════════
+// Vérifie toutes les 30s si un message système a été publié et le transmet à chaque owner
+let lastSyscastDate = null
+
+setInterval(async () => {
+  try {
+    const raw = await redis.get('syscast:latest')
+    if (!raw) return
+    const data = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!data?.date || data.date === lastSyscastDate) return
+    lastSyscastDate = data.date
+
+    const icon = data.type === 'warning' ? '⚠️' : '📡'
+    const text = `${icon} *Message du créateur du bot*\n\n${data.message}\n\n— *${config.botName}*`
+
+    for (const [sessionId, session] of sessions) {
+      if (!session.connected || !session.phone) continue
+      try {
+        await session.sock.sendMessage(session.phone + '@s.whatsapp.net', { text })
+      } catch {}
+    }
+  } catch {}
+}, 30 * 1000)
 
 // ═══════════ START ═══════════
 const PORT = process.env.PORT || 3000
