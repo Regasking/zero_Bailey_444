@@ -165,16 +165,21 @@ export const personality = {
     return false
   },
 
-  // Version stricte pour commandes ultra-sensibles (eval, restart, broadcast)
+  // Version stricte : UNIQUEMENT le rôle 'owner' (pas co-owner)
+  // Utilisé pour eval, restart, broadcast, blacklist, syscast
   isHardOwner(jid) {
     if (!jid || typeof jid !== 'string') return false
     const senderNum = jid.split('@')[0].split(':')[0].trim()
     if (!senderNum || !/^\d+$/.test(senderNum)) return false
 
     return config.owners.some(o => {
+      if (o.role !== 'owner') return false  // co-owner exclus
       const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
       const lidNum   = o.lid?.split('@')[0]?.split(':')[0]?.trim()
-      return (ownerNum && ownerNum === senderNum) || (lidNum && lidNum === senderNum)
+      const lid2Num  = o.lid2?.split('@')[0]?.split(':')[0]?.trim()
+      return (ownerNum && ownerNum === senderNum)
+          || (lidNum   && lidNum   === senderNum)
+          || (lid2Num  && lid2Num  === senderNum)
     })
   }
 }

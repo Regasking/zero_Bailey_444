@@ -40,71 +40,97 @@ async function getBlacklist() {
 }
 
 // ═══════════ SYSCAST ═══════════
-// Publie un message dans Redis — tous les bots actifs le lisent et le transmettent à leur owner
 export async function publishSyscast(message, type = 'info') {
   await redis.set('syscast:latest', JSON.stringify({
-    message,
-    type,
+    message, type,
     date: new Date().toISOString(),
     from: 'admin'
-  }), { ex: 60 * 60 * 24 }) // expire après 24h
+  }), { ex: 60 * 60 * 24 })
 }
 
-export default {
-  name: 'syscast',
-  alias: ['sc', 'blacklist'],
-  desc: 'Broadcast système + gestion blacklist (créateur uniquement)',
+// ═══════════ COMMANDE BLACKLIST ═══════════
+export const blacklistCommand = {
+  name: 'blacklist',
+  alias: ['bl'],
+  desc: 'Gérer la liste noire',
   category: 'owner',
   ownerOnly: true,
 
-  async execute(sock, msg, args, { isOwner, senderJid }) {
+  async execute(sock, msg, args, { isOwner, isSessionOwner, senderJid }) {
     const jid = msg.key.remoteJid
-    if (!personality.isHardOwner(senderJid)) return
 
-    const sub = args[0]?.toLowerCase()
-
-    // ── .blacklist add/remove/list ─────────────────────────────
-    if (sub === 'blacklist' || msg.body?.startsWith(config.prefix + 'blacklist')) {
-      const action = args[1]?.toLowerCase() || args[0]?.toLowerCase()
-      const num = args[2] || args[1]
-
-      if (action === 'add' && num) {
-        const reason = args.slice(3).join(' ') || 'Utilisation abusive'
-        await addBlacklist(num, reason)
-        await publishSyscast(`🚫 Utilisateur *${num}* banni.\nRaison : _${reason}_`, 'warning')
-        return sendSanction(sock, jid, `🚫 *${num}* ajouté à la liste noire.\nRaison : _${reason}_\n\n_Tous les bots ont été notifiés._`, { quoted: msg })
-      }
-
-      if (action === 'remove' && num) {
-        await removeBlacklist(num)
-        return sock.sendMessage(jid, { text: `*${num}* libéré. Il a intérêt à se tenir.\n\n— *${config.botName}*` }, { quoted: msg })
-      }
-
-      if (action === 'list') {
-        const list = await getBlacklist()
-        if (!list.length) return sock.sendMessage(jid, { text: `Liste noire vide. Soit tout le monde se tient bien, soit t'as pas encore sévi.\n\n— *${config.botName}*` }, { quoted: msg })
-        const text = list.map(e => `▸ *${e.num}* — ${e.reason} (${e.date?.slice(0, 10)})`).join('\n')
-        return sock.sendMessage(jid, {
-          text: `╔══════════════════════╗\n  🚫  L I S T E  N O I R E\n╚══════════════════════╝\n\n${text}\n\n— *${config.botName}*`
-        }, { quoted: msg })
-      }
-
+    // Accessible aux deux owners (hard + co-owner)
+    if (!isOwner && !isSessionOwner) {
       return sock.sendMessage(jid, {
-        text: `*Utilisation :*\n▸ \`${config.prefix}blacklist add <num> [raison]\`\n▸ \`${config.prefix}blacklist remove <num>\`\n▸ \`${config.prefix}blacklist list\``
+        text: `Tu peux pas me donner des ordres.\n\n— *${config.botName}*`
       }, { quoted: msg })
     }
 
-    // ── .syscast <message> ────────────────────────────────────
+    const action = args[0]?.toLowerCase()
+    const num    = args[1]
+    const reason = args.slice(2).join(' ') || 'Utilisation abusive'
+
+    if (action === 'add' && num) {
+      await addBlacklist(num, reason)
+      await publishSyscast(`🚫 Utilisateur *${num}* banni.\nRaison : _${reason}_`, 'warning')
+      return sendSanction(sock, jid,
+        `🚫 *${num}* ajouté à la liste noire.\nRaison : _${reason}_\n\n_Tous les bots ont été notifiés._`,
+        { quoted: msg }
+      )
+    }
+
+    if (action === 'remove' && num) {
+      await removeBlacklist(num)
+      return sock.sendMessage(jid, {
+        text: `*${num}* libéré. Il a intérêt à se tenir.\n\n— *${config.botName}*`
+      }, { quoted: msg })
+    }
+
+    if (action === 'list') {
+      const list = await getBlacklist()
+      if (!list.length) return sock.sendMessage(jid, {
+        text: `Liste noire vide. Soit tout le monde se tient bien, soit t'as pas encore sévi.\n\n— *${config.botName}*`
+      }, { quoted: msg })
+      const text = list.map(e => `▸ *${e.num}* — ${e.reason} (${e.date?.slice(0, 10)})`).join('\n')
+      return sock.sendMessage(jid, {
+        text: `╔══════════════════════╗\n  🚫  L I S T E  N O I R E\n╚══════════════════════╝\n\n${text}\n\n— *${config.botName}*`
+      }, { quoted: msg })
+    }
+
+    // Usage
+    return sock.sendMessage(jid, {
+      text: `*Utilisation :*\n▸ \`${config.prefix}blacklist add <num> [raison]\`\n▸ \`${config.prefix}blacklist remove <num>\`\n▸ \`${config.prefix}blacklist list\`\n\n— *${config.botName}*`
+    }, { quoted: msg })
+  }
+}
+
+// ═══════════ COMMANDE SYSCAST ═══════════
+export default {
+  name: 'syscast',
+  alias: ['sc'],
+  desc: 'Broadcast système vers tous les owners',
+  category: 'owner',
+  ownerOnly: true,
+
+  async execute(sock, msg, args, { senderJid }) {
+    const jid = msg.key.remoteJid
+
+    // Syscast : hard owner uniquement (toi)
+    if (!personality.isHardOwner(senderJid)) {
+      return sock.sendMessage(jid, {
+        text: `Cette commande est réservée au créateur.\n\n— *${config.botName}*`
+      }, { quoted: msg })
+    }
+
     if (!args.length) {
       return sock.sendMessage(jid, {
-        text: `Tu veux me parler à travers tous les bots à la fois ? Impressionnant comme ambition.\n\n▸ \`${config.prefix}syscast <message>\` — Tous les owners reçoivent\n▸ \`${config.prefix}syscast veille\` — Annonce de maintenance\n▸ \`${config.prefix}blacklist add/remove/list\` — Gérer les bannis\n\n— *${config.botName}*`
+        text: `▸ \`${config.prefix}syscast <message>\` — Tous les owners reçoivent\n▸ \`${config.prefix}syscast veille\` — Annonce de maintenance\n\n— *${config.botName}*`
       }, { quoted: msg })
     }
 
     let message = args.join(' ')
     let type = 'info'
 
-    // Raccourcis
     if (message === 'veille') {
       message = `⚠️ Le bot sera mis en maintenance dans quelques minutes. Merci de votre compréhension.`
       type = 'warning'

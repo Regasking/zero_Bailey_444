@@ -132,7 +132,7 @@ async function autoReactNewsletterMessage(sock, msg) {
   } catch {}
 }
 
-export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null) {
+export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null, sessions = null) {
 
   if (registeredSockets.has(sock)) {
     console.log('[EventHandler] Socket déjà enregistré, skip.')
@@ -177,7 +177,11 @@ export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, s
       }
 
       // Traitement commande normal
-      await handleMessage(sock, msg, sessionId, sessionOwnerPhone, sessionOwnerLid)
+      // Relire ownerLid/ownerPhone depuis la session à chaque message (disponibles après connection.update)
+      const liveSession = sessions?.get(sessionId)
+      const liveOwnerLid   = liveSession?.ownerLid   || sessionOwnerLid
+      const liveOwnerPhone = liveSession?.ownerPhone  || sessionOwnerPhone
+      await handleMessage(sock, msg, sessionId, liveOwnerPhone, liveOwnerLid)
     }
   })
 

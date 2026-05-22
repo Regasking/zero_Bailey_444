@@ -42,7 +42,7 @@ export default {
   alias: ['csend'],
   desc: 'Télécharger et envoyer une chanson vers un JID/Channel',
   category: 'media',
-  ownerOnly: false,
+  ownerOnly: true,
 
   async execute(sock, msg, args, { isOwner }) {
     const jid = msg.key.remoteJid

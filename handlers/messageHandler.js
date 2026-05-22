@@ -114,24 +114,31 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
     const senderJid = msg.key.participant || msg.key.remoteJid
     const quotedId  = msg.message?.extendedTextMessage?.contextInfo?.stanzaId
 
-    // ── senderNum et remoteNum ──────────────────────────────────
-    const senderNum = senderJid.split('@')[0].split(':')[0]
-    const remoteNum = jid.split('@')[0].split(':')[0] // numéro réel en DM
+    // ── senderNum : numéro brut de l'expéditeur, sans @ ni suffixe :X ──
+    // Baileys ajoute parfois un suffixe multi-device (ex: 22890123456:2@s.whatsapp.net)
+    const senderNum = senderJid.split('@')[0].split(':')[0]  // ex: "22890123456"
+
     const sessionPhone = sessionOwnerPhone?.replace(/\D/g, '') || null
 
-    // ── isOwner : numéro OU lid hardcodé dans config ────────────
-    const isOwner = config.owners.some(o => {
-      const num = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      const lid = o.lid?.split('@')[0]?.split(':')[0]?.trim()
-      return (num && (num === senderNum || num === remoteNum))
-          || (lid && (lid === senderNum || lid === remoteNum))
+    // ── isOwner : compare senderNum aux admins définis dans .env ──
+    // config.owners[].number = "22890123456@s.whatsapp.net" (config.js ajoute le @)
+    // config.owners[].lid    = "12345678901234@lid"
+    // config.owners[].lid2   = idem (LID alternatif)
+    console.log('[DEBUG OWNER]', { senderNum, owners: config.owners.map(o => ({ num: o.number?.split('@')[0]?.split(':')[0], lid: o.lid?.split('@')[0]?.split(':')[0] })) })
+const isOwner = config.owners.some(o => {
+      const num  = o.number?.split('@')[0]?.split(':')[0]
+      const lid  = o.lid?.split('@')[0]?.split(':')[0]
+      const lid2 = o.lid2?.split('@')[0]?.split(':')[0]
+      return (num  && num  === senderNum)
+          || (lid  && lid  === senderNum)
+          || (lid2 && lid2 === senderNum)
     })
 
-    // ── isSessionOwner : isOwner OU LID/numéro de session ───────
-    // sessionOwnerLid = LID réel stocké au moment de la connexion WhatsApp
+    // ── isSessionOwner : isOwner OU le propriétaire de cette session ─
+    const cleanSessionLid = sessionOwnerLid?.split('@')[0]?.split(':')[0]
     const isSessionOwner = isOwner
-      || (sessionPhone && (senderNum === sessionPhone || remoteNum === sessionPhone))
-      || (sessionOwnerLid && (senderNum === sessionOwnerLid || remoteNum === sessionOwnerLid))
+      || (sessionPhone && senderNum === sessionPhone)
+      || (cleanSessionLid && senderNum === cleanSessionLid)
 
     // ── FIX SONG ─────────────────────────────────────────────────
     if (_songModule && quotedId) {
@@ -238,7 +245,7 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
       return
     }
 
-    if (command.ownerOnly && !isOwner) {
+    if (command.ownerOnly && !isOwner && !isSessionOwner) {
       reactToMessage(sock, msg, 'default').catch(() => {})
       await sock.sendMessage(jid, { text: t(senderJid, 'no_permission') }, { quoted: msg })
       return

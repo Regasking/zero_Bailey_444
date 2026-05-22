@@ -283,7 +283,7 @@ async function createSocket(sessionId, cleanPhone) {
         setTimeout(async () => {
           try {
             const newSock = await createSocket(sessionId, cleanPhone)
-            handleEvents(newSock, store, sessionId, cleanPhone, sessions.get(sessionId)?.ownerLid)
+            handleEvents(newSock, store, sessionId, cleanPhone, sessions.get(sessionId)?.ownerLid, sessions)
             if (sessions.has(sessionId)) sessions.get(sessionId).sock = newSock
             reconnectAttempts.delete(sessionId) // reset après succès
           } catch (err) {
@@ -301,7 +301,8 @@ async function createSocket(sessionId, cleanPhone) {
     await saveSession(sessionId, sessionPath, cleanPhone)
   })
 
-  handleEvents(sock, store, sessionId, cleanPhone, ownerLid)
+  // ownerLid n'est défini qu'après connection.update — on le lit depuis la session dynamiquement
+  handleEvents(sock, store, sessionId, cleanPhone, null, sessions)
   return sock
 }
 
@@ -336,6 +337,21 @@ app.get('/api/session/:sessionId', apiRateLimit, requireAuth, (req, res) => {
   const session = sessions.get(req.params.sessionId)
   if (!session) return res.json({ exists: false })
   res.json({ exists: true, connected: session.connected, phone: session.phone })
+})
+
+// ── Liste toutes les sessions (dashboard) ──
+app.get('/api/sessions', apiRateLimit, (req, res) => {
+  const list = []
+  for (const [id, session] of sessions) {
+    list.push({
+      id,
+      phone: session.phone || null,
+      name: session.name || null,
+      connected: session.connected || false,
+      connecting: !session.connected && !!session.sock,
+    })
+  }
+  res.json({ sessions: list, total: list.length })
 })
 
 app.delete('/api/session/:sessionId', apiRateLimit, requireAuth, async (req, res) => {
