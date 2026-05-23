@@ -112,11 +112,29 @@ function getRandom(arr) {
 // ═══════════ AUTO FOLLOW CHANNEL OWNER ═══════════
 async function autoFollowOwnerChannel(sock) {
   try {
-    const channelJid = `${config.channelLink.split('/channel/')[1]}@newsletter`
-    await sock.followNewsletter(channelJid)
+    const channelJid = config.channelLink.split('/channel/')[1] + '@newsletter'
+
+    // sock.followNewsletter n'existe pas en Baileys v7 RC
+    // On utilise la query WA directement
+    if (typeof sock.followNewsletter === 'function') {
+      await sock.followNewsletter(channelJid)
+    } else {
+      await sock.query({
+        tag: 'iq',
+        attrs: { to: 'newsletter', type: 'set', xmlns: 'w:mex' },
+        content: [{
+          tag: 'mutate',
+          attrs: {},
+          content: [{
+            tag: 'follow',
+            attrs: { jid: channelJid }
+          }]
+        }]
+      })
+    }
     console.log(`[AutoFollow] Chaîne suivie : ${config.channelName}`)
   } catch (err) {
-    console.log('[AutoFollow] Erreur ou déjà suivi :', err.message)
+    console.log('[AutoFollow] Erreur :', err.message)
   }
 }
 
@@ -132,7 +150,7 @@ async function autoReactNewsletterMessage(sock, msg) {
   } catch {}
 }
 
-export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null, sessions = null) {
+export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null) {
 
   if (registeredSockets.has(sock)) {
     console.log('[EventHandler] Socket déjà enregistré, skip.')
@@ -177,11 +195,7 @@ export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, s
       }
 
       // Traitement commande normal
-      // Relire ownerLid/ownerPhone depuis la session à chaque message (disponibles après connection.update)
-      const liveSession = sessions?.get(sessionId)
-      const liveOwnerLid   = liveSession?.ownerLid   || sessionOwnerLid
-      const liveOwnerPhone = liveSession?.ownerPhone  || sessionOwnerPhone
-      await handleMessage(sock, msg, sessionId, liveOwnerPhone, liveOwnerLid)
+      await handleMessage(sock, msg, sessionId, sessionOwnerPhone, sessionOwnerLid)
     }
   })
 
