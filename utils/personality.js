@@ -172,14 +172,11 @@ export const personality = {
     const senderNum = jid.split('@')[0].split(':')[0].trim()
     if (!senderNum || !/^\d+$/.test(senderNum)) return false
 
+    // Vérification par numéro uniquement — LID instable selon appareil/session
     return config.owners.some(o => {
       if (o.role !== 'owner') return false  // co-owner exclus
       const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      const lidNum   = o.lid?.split('@')[0]?.split(':')[0]?.trim()
-      const lid2Num  = o.lid2?.split('@')[0]?.split(':')[0]?.trim()
-      return (ownerNum && ownerNum === senderNum)
-          || (lidNum   && lidNum   === senderNum)
-          || (lid2Num  && lid2Num  === senderNum)
+      return ownerNum && ownerNum === senderNum
     })
   }
 }

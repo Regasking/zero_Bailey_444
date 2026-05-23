@@ -124,14 +124,10 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
     // config.owners[].number = "22890123456@s.whatsapp.net" (config.js ajoute le @)
     // config.owners[].lid    = "12345678901234@lid"
     // config.owners[].lid2   = idem (LID alternatif)
-    console.log('[DEBUG OWNER]', { senderNum, owners: config.owners.map(o => ({ num: o.number?.split('@')[0]?.split(':')[0], lid: o.lid?.split('@')[0]?.split(':')[0] })) })
-const isOwner = config.owners.some(o => {
-      const num  = o.number?.split('@')[0]?.split(':')[0]
-      const lid  = o.lid?.split('@')[0]?.split(':')[0]
-      const lid2 = o.lid2?.split('@')[0]?.split(':')[0]
-      return (num  && num  === senderNum)
-          || (lid  && lid  === senderNum)
-          || (lid2 && lid2 === senderNum)
+    // Vérification par numéro uniquement — le LID change selon l'appareil/session
+    const isOwner = config.owners.some(o => {
+      const num = o.number?.split('@')[0]?.split(':')[0]
+      return num && num === senderNum
     })
 
     // ── isSessionOwner : isOwner OU le propriétaire de cette session ─
