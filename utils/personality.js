@@ -167,16 +167,19 @@ export const personality = {
 
   // Version stricte : UNIQUEMENT le rôle 'owner' (pas co-owner)
   // Utilisé pour eval, restart, broadcast, blacklist, syscast
-  isHardOwner(jid) {
+  isHardOwner(jid, sessionLid = null) {
     if (!jid || typeof jid !== 'string') return false
     const senderNum = jid.split('@')[0].split(':')[0].trim()
     if (!senderNum || !/^\d+$/.test(senderNum)) return false
 
-    // Vérification par numéro uniquement — LID instable selon appareil/session
+    // Vérification par numéro ET par LID de session (WhatsApp envoie le LID en DM)
+    // On passe sessionLid en 2ème argument optionnel
     return config.owners.some(o => {
       if (o.role !== 'owner') return false  // co-owner exclus
       const ownerNum = o.number?.split('@')[0]?.split(':')[0]?.trim()
-      return ownerNum && ownerNum === senderNum
+      if (ownerNum && ownerNum === senderNum) return true
+      if (sessionLid && sessionLid === senderNum) return true
+      return false
     })
   }
 }

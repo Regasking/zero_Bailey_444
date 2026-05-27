@@ -120,18 +120,20 @@ export async function handleMessage(sock, msg, sessionId = null, sessionOwnerPho
 
     const sessionPhone = sessionOwnerPhone?.replace(/\D/g, '') || null
 
-    // ── isOwner : compare senderNum aux admins définis dans .env ──
-    // config.owners[].number = "22890123456@s.whatsapp.net" (config.js ajoute le @)
-    // config.owners[].lid    = "12345678901234@lid"
-    // config.owners[].lid2   = idem (LID alternatif)
-    // Vérification par numéro uniquement — le LID change selon l'appareil/session
+    // ── isOwner : vérifie par numéro OU par LID de session ──────────
+    // WhatsApp envoie le LID en conv privée, le numéro en groupe
+    // On accepte les deux pour couvrir tous les cas
+    const cleanSessionLid = sessionOwnerLid?.split('@')[0]?.split(':')[0]
     const isOwner = config.owners.some(o => {
       const num = o.number?.split('@')[0]?.split(':')[0]
-      return num && num === senderNum
+      // Numéro direct
+      if (num && num === senderNum) return true
+      // LID de session (stocké lors de la connexion, plus fiable que le .env)
+      if (cleanSessionLid && cleanSessionLid === senderNum) return true
+      return false
     })
 
-    // ── isSessionOwner : isOwner OU le propriétaire de cette session ─
-    const cleanSessionLid = sessionOwnerLid?.split('@')[0]?.split(':')[0]
+    // ── isSessionOwner : même logique — owner reconnu = session owner ─
     const isSessionOwner = isOwner
       || (sessionPhone && senderNum === sessionPhone)
       || (cleanSessionLid && senderNum === cleanSessionLid)

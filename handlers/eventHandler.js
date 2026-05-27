@@ -1,4 +1,13 @@
 import { handleMessage } from './messageHandler.js'
+import antibotCmd from '../commands/group/antibot.js'
+import antispamCmd from '../commands/group/antispam.js'
+import antilinkCmd from '../commands/group/antilink.js'
+import antibadwordCmd from '../commands/group/antibadword.js'
+import antitagCmd from '../commands/group/antitag.js'
+import antistatusCmd from '../commands/group/antistatus.js'
+
+// Anti-modules avec détection automatique
+const antiModules = [antibotCmd, antispamCmd, antilinkCmd, antibadwordCmd, antitagCmd, antistatusCmd]
 import { config } from '../config.js'
 import { Redis } from '@upstash/redis'
 import {
@@ -150,7 +159,7 @@ async function autoReactNewsletterMessage(sock, msg) {
   } catch {}
 }
 
-export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null) {
+export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, sessionOwnerLid = null, sessions = null) {
 
   if (registeredSockets.has(sock)) {
     console.log('[EventHandler] Socket déjà enregistré, skip.')
@@ -192,10 +201,18 @@ export function handleEvents(sock, store, sessionId, sessionOwnerPhone = null, s
       // Protections anti-* sur les messages de groupe (non bloquant)
       if (msg.key.remoteJid?.endsWith('@g.us')) {
         handleMessageProtection(sock, msg).catch(() => {})
+        // Détection automatique des anti-modules
+        for (const mod of antiModules) {
+          if (typeof mod.detect === 'function') mod.detect(sock, msg).catch(() => {})
+        }
       }
 
       // Traitement commande normal
-      await handleMessage(sock, msg, sessionId, sessionOwnerPhone, sessionOwnerLid)
+      // Relire depuis la session en live (ownerLid/ownerPhone dispo après connection.update)
+      const liveSession    = sessions?.get(sessionId)
+      const liveOwnerPhone = liveSession?.ownerPhone || sessionOwnerPhone
+      const liveOwnerLid   = liveSession?.ownerLid   || sessionOwnerLid
+      await handleMessage(sock, msg, sessionId, liveOwnerPhone, liveOwnerLid)
     }
   })
 

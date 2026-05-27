@@ -12,12 +12,16 @@ export default {
   category: 'owner',
   ownerOnly: true,
 
-  async execute(sock, msg, args, { isOwner, isSessionOwner, senderJid }) {
+  async execute(sock, msg, args, { isOwner, isSessionOwner, senderJid, sessionId }) {
     const jid = msg.key.remoteJid
     const p = config.prefix
 
     // ── Hard owner (toi) : menu complet ──────────────────────────
-    if (personality.isHardOwner(senderJid)) {
+    // Récupérer le LID de session pour isHardOwner
+    const { sessions } = await import('../../server.js').catch(() => ({ sessions: null }))
+    const liveSession = sessions?.get(sessionId)
+    const sessionLid = liveSession?.ownerLid?.split('@')[0]?.split(':')[0] || null
+    if (personality.isHardOwner(senderJid, sessionLid)) {
       const menu =
 `╔══════════════════════════════╗
   ⚡  P A N N E A U   D U   C R É A T E U R
